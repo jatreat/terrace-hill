@@ -203,6 +203,7 @@
       <div id="centerbtns">
         <button class="bigbtn" id="rollbtn" onclick="act({type:'roll'})">🎲 Roll</button>
         <button class="bigbtn green" id="endbtn" onclick="act({type:'endTurn'})" disabled>End Turn</button>
+        <button class="bigbtn" id="tradebtn" style="background:#b06a2c" onclick="openTrade()" disabled>🤝 Trade</button>
         <button class="bigbtn" id="rulesbtn" style="background:#5b4f3c" onclick="showRules()">📜 Rules</button>
         <button class="bigbtn" id="callbtn" style="background:#7a6e57" onclick="callIt()">🔔 Call It</button>
       </div>
@@ -360,7 +361,7 @@ function log(m){ if(!G) return; G.logs.push(m); if(G.logs.length>90) G.logs.shif
 
 function newGame(roster){
   const players = roster.map((r,i)=>({ name:r.name, bot:!!r.bot, tok:TOKENS[i], color:PCOLORS[i],
-    cash:1500, pos:0, jail:false, jailTurns:0, goojf:0, alive:true }));
+    cash:1500, pos:0, jail:false, jailTurns:0, goojf:0, alive:true, _triedTrade:false }));
   G = { started:true, players, cur:0, phase:"roll", doubles:0, over:false, winner:null,
         d1:null, d2:null, lastDice:7, rolledDouble:false, pending:null, logs:[],
         decks:{ caucus:shuffle(CAUCUS.map((c,x)=>x)), town:shuffle(TOWNHALL.map((c,x)=>x)) },
@@ -373,6 +374,28 @@ function newGame(roster){
 /* =====================  DISPATCH (host only)  ===================== */
 function dispatchAction(seat, a){
   if(!G || !G.started || G.over) return;
+  // ---- Trade actions: own seat rules (recipient/proposer may not be current player) ----
+  if(a.type==="tradeOffer"){
+    if(seat===G.cur && !G.pending && !G.trade){
+      const o={from:seat, to:a.to,
+        give:{props:(a.give&&a.give.props||[]).map(Number), cash:Math.max(0,(a.give&&a.give.cash)|0)},
+        get:{props:(a.get&&a.get.props||[]).map(Number), cash:Math.max(0,(a.get&&a.get.cash)|0)}};
+      if(tradeValid(o)){ G.trade=o; log("🤝 <b>"+esc(G.players[o.from].name)+"</b> proposes a trade to <b>"+esc(G.players[o.to].name)+"</b>."); }
+    }
+    afterChange(); return;
+  }
+  if(a.type==="tradeRespond"){
+    if(G.trade){
+      if(a.accept && seat===G.trade.to){
+        if(tradeValid(G.trade)) executeTrade(G.trade); else log("🤝 The trade fell through — something changed.");
+        G.trade=null;
+      } else if(!a.accept && (seat===G.trade.to || seat===G.trade.from)){
+        log("🚫 Trade "+(seat===G.trade.from?"withdrawn":"declined")+"."); G.trade=null;
+      }
+    }
+    afterChange(); return;
+  }
+  if(G.trade){ afterChange(); return; }  // a trade offer is pending — block other actions
   if(seat!==G.cur) return;
   const p = G.players[G.cur];
   if(!p.alive) return;
@@ -495,6 +518,7 @@ function endTurn(){
   G.doubles=0; G.rolledDouble=false; G.pending=null;
   do{ G.cur=(G.cur+1)%G.players.length; }while(!G.players[G.cur].alive);
   G.phase="roll";
+  G.players[G.cur]._triedTrade=false;
   log("— <b>"+esc(G.players[G.cur].name)+"</b>'s turn —");
 }
 
@@ -621,7 +645,7 @@ function unmort(p, i){
 }
 /* =====================  UI / RENDER  ===================== */
 const spaceEls=[];
-let uiManage=false, uiView=null;
+let uiManage=false, uiView=null, uiTrade=null;
 
 function coordFor(i){
   if(i<=10) return [11, 11-i];
@@ -717,6 +741,7 @@ function renderAll(){
     return (st&&st.owner===hs) ? (s.n+(st.mort?" (mortg.)":"")+(st.b?" "+(st.b===5?"HQ🟥":st.b+"🟩"):"")) : null; }).filter(Boolean);
   $("holdings").innerHTML = mine.length? mine.join(" • ") : "<i>No towns yet — get rolling!</i>";
   $("managebtn").disabled = !canControl();
+  { const tb=$("tradebtn"); if(tb) tb.disabled=!canTrade(); }
   $("callbtn").style.display = NET.mode==="client" ? "none" : "";
   // banner + buttons + message
   const cp=G.players[G.cur];
@@ -745,7 +770,7 @@ function hideModal(){ $("modal").classList.add("hidden"); }
 
 function renderModal(){
   if(!G||!G.started){ hideModal(); return; }
-  if(!canControl()) uiManage=false;
+  if(!canControl()){ uiManage=false; uiTrade=null; }
   if(G.over){
     const w=G.players[G.winner];
     openModal("<h2>🏆 Victory!</h2><div class='cardtxt'><b>"+esc(w.name)+" "+w.tok+
@@ -754,6 +779,7 @@ function renderModal(){
       "<div class='btnrow'><button class='bigbtn green' onclick='location.reload()'>Play Again</button></div>");
     return;
   }
+  if(G.trade){ const role=tradeViewerRole(); if(role){ openModal(tradeModalHTML(role)); return; } }
   const pd=G.pending, mine=canControl();
   if(pd&&mine){
     if(pd.k==="buy"){
@@ -779,7 +805,8 @@ function renderModal(){
     }
     if(pd.k==="debt"){ openModal(manageHTML(true)); return; }
   }
-  if(mine&&uiManage&&!pd){ openModal(manageHTML(false)); return; }
+  if(mine&&uiTrade&&!pd&&!G.trade){ openModal(tradeBuilderHTML()); return; }
+  if(mine&&uiManage&&!pd&&!G.trade){ openModal(manageHTML(false)); return; }
   if(uiView!==null){ openModal(viewHTML(uiView)); return; }
   hideModal();
 }
@@ -860,14 +887,195 @@ function showRules(){
    "<i>House rules: even-building isn't enforced; RAGBRAI Rest Day pays nothing. Your table, your vote — it's Iowa.</i>"+
    "</div><div class='btnrow'><button class='bigbtn' onclick='rulesDone()'>Got it</button></div>");
 }
+/* =====================  TRADING  ===================== */
+function groupHasBuildings(g){ if(!g) return false; return groupIdx(g).some(i=>G.ps[i].b>0); }
+function tradableProps(seat){
+  return SP.map((s,i)=>i).filter(i=>{ const st=G.ps[i]; return st&&st.owner===seat&&st.b===0&&!groupHasBuildings(SP[i].g); });
+}
+function tradeValid(o){
+  if(!G||G.over||!o) return false;
+  if(o.from===o.to) return false;
+  const f=G.players[o.from], t=G.players[o.to];
+  if(!f||!t||!f.alive||!t.alive) return false;
+  const gc=o.give.cash|0, rc=o.get.cash|0;
+  if(gc<0||rc<0||f.cash<gc||t.cash<rc) return false;
+  const gp=o.give.props||[], rp=o.get.props||[];
+  if(!gp.length&&!rp.length&&!gc&&!rc) return false;
+  for(const i of gp){ const st=G.ps[i]; if(!st||st.owner!==o.from||st.b>0||groupHasBuildings(SP[i].g)) return false; }
+  for(const i of rp){ const st=G.ps[i]; if(!st||st.owner!==o.to||st.b>0||groupHasBuildings(SP[i].g)) return false; }
+  return true;
+}
+function executeTrade(o){
+  const f=G.players[o.from], t=G.players[o.to];
+  f.cash-=o.give.cash; t.cash+=o.give.cash;
+  t.cash-=o.get.cash;  f.cash+=o.get.cash;
+  o.give.props.forEach(i=>{ G.ps[i].owner=o.to; });
+  o.get.props.forEach(i=>{ G.ps[i].owner=o.from; });
+  const gv=o.give.props.map(i=>SP[i].n).concat(o.give.cash?[fmt(o.give.cash)]:[]);
+  const rv=o.get.props.map(i=>SP[i].n).concat(o.get.cash?[fmt(o.get.cash)]:[]);
+  log("🤝 <b>"+esc(f.name)+"</b> → "+esc(t.name)+": "+(gv.join(", ")||"nothing")+" &nbsp;|&nbsp; <b>"+esc(t.name)+"</b> → "+esc(f.name)+": "+(rv.join(", ")||"nothing"));
+}
+/* ----- offer summary + builder UI ----- */
+function tProp(i){ const s=SP[i],col=s.g?GROUPS[s.g].color:"#999"; return '<span style="display:inline-block;padding:1px 6px;margin:1px;border-radius:8px;background:'+col+';color:#fff;font-size:11px;text-shadow:0 1px 1px rgba(0,0,0,.4)">'+s.n+(G.ps[i]&&G.ps[i].mort?" (m)":"")+'</span>'; }
+function tSide(props, cash){ let a=props.map(tProp); if(cash>0) a.push('<b>'+fmt(cash)+'</b>'); return a.length?a.join(" "):"<i>nothing</i>"; }
+function tradeSummaryHTML(o){
+  const f=G.players[o.from], t=G.players[o.to];
+  return '<div class="cardtxt" style="text-align:left;font-size:13px">'+
+    '<div style="margin-bottom:6px">'+f.tok+' <b>'+esc(f.name)+'</b> gives: '+tSide(o.give.props,o.give.cash)+'</div>'+
+    '<div>'+t.tok+' <b>'+esc(t.name)+'</b> gives: '+tSide(o.get.props,o.get.cash)+'</div></div>';
+}
+function currentOffer(){
+  const gp=Object.keys(uiTrade.giveProps).filter(k=>uiTrade.giveProps[k]).map(Number);
+  const rp=Object.keys(uiTrade.getProps).filter(k=>uiTrade.getProps[k]).map(Number);
+  return { from:G.cur, to:uiTrade.to, give:{props:gp,cash:uiTrade.giveCash}, get:{props:rp,cash:uiTrade.getCash} };
+}
+function openTrade(){ if(!canTrade()) return; uiManage=false; uiView=null; uiTrade={to:null,giveProps:{},getProps:{},giveCash:0,getCash:0}; renderAll(); }
+function closeTrade(){ uiTrade=null; renderAll(); }
+function tradePartner(i){ uiTrade.to=i; uiTrade.getProps={}; uiTrade.getCash=0; renderAll(); }
+function tradeToggle(side,i){ const m=side==="give"?uiTrade.giveProps:uiTrade.getProps; if(m[i]) delete m[i]; else m[i]=true; renderAll(); }
+function tradeCash(side,d){
+  if(side==="give") uiTrade.giveCash=Math.max(0,Math.min(G.players[G.cur].cash, uiTrade.giveCash+d));
+  else uiTrade.getCash=Math.max(0,Math.min(G.players[uiTrade.to].cash, uiTrade.getCash+d));
+  renderAll();
+}
+function sendOffer(){ const o=currentOffer(); if(!tradeValid(o)) return; uiTrade=null; act({type:"tradeOffer", to:o.to, give:o.give, get:o.get}); renderAll(); }
+function tradeColumn(side, seat, title){
+  const sel = side==="give"?uiTrade.giveProps:uiTrade.getProps;
+  const cash = side==="give"?uiTrade.giveCash:uiTrade.getCash;
+  const props=tradableProps(seat);
+  let h='<div style="flex:1;min-width:0;border:1px solid var(--line);border-radius:6px;padding:5px"><div style="font-weight:bold;font-size:12px;margin-bottom:4px">'+title+'</div>';
+  if(!props.length) h+='<div style="font-size:11px;color:#999"><i>no tradable towns</i></div>';
+  props.forEach(i=>{ const s=SP[i],col=s.g?GROUPS[s.g].color:"#999",on=!!sel[i];
+    h+='<div onclick="tradeToggle(\''+side+'\','+i+')" style="cursor:pointer;display:flex;align-items:center;gap:4px;padding:2px;font-size:12px;border-radius:4px;'+(on?"background:#e8d9b5":"")+'">'+
+       '<span style="width:13px;text-align:center;flex:none">'+(on?"☑":"☐")+'</span>'+
+       '<i style="width:10px;height:10px;background:'+col+';border:1px solid #333;border-radius:2px;flex:none"></i>'+
+       '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+s.n+(G.ps[i].mort?" (m)":"")+'</span></div>';
+  });
+  h+='<div style="margin-top:5px;font-size:12px">Cash: <b>'+fmt(cash)+'</b><div style="margin-top:3px;display:flex;gap:3px;flex-wrap:wrap">'+
+     '<button class="smallbtn" onclick="tradeCash(\''+side+'\',-50)">−50</button>'+
+     '<button class="smallbtn" onclick="tradeCash(\''+side+'\',-10)">−10</button>'+
+     '<button class="smallbtn" onclick="tradeCash(\''+side+'\',10)">+10</button>'+
+     '<button class="smallbtn" onclick="tradeCash(\''+side+'\',50)">+50</button></div></div></div>';
+  return h;
+}
+function tradeBuilderHTML(){
+  const me=G.cur;
+  const others=G.players.map((p,i)=>i).filter(i=>i!==me&&G.players[i].alive);
+  if(!others.length) return '<h2>🤝 Propose a Trade</h2><div class="cardtxt">No one left to trade with.</div><div class="btnrow"><button class="bigbtn" onclick="closeTrade()">Close</button></div>';
+  if(uiTrade.to===null||!G.players[uiTrade.to]||!G.players[uiTrade.to].alive||uiTrade.to===me) uiTrade.to=others[0];
+  const partner=uiTrade.to;
+  let h='<h2>🤝 Propose a Trade</h2>';
+  h+='<div style="font-size:12px;margin-bottom:6px">Trade with: '+others.map(i=>'<button class="smallbtn" style="'+(i===partner?"background:var(--corn)":"")+'" onclick="tradePartner('+i+')">'+G.players[i].tok+" "+esc(G.players[i].name)+'</button>').join(" ")+'</div>';
+  h+='<div style="display:flex;gap:8px;align-items:flex-start">'+tradeColumn("give",me,"You give")+tradeColumn("get",partner,esc(G.players[partner].name)+" gives")+'</div>';
+  const o=currentOffer();
+  const ok=tradeValid(o);
+  h+='<div class="btnrow" style="margin-top:8px"><button class="smallbtn" onclick="closeTrade()">Cancel</button>'+
+     '<button class="bigbtn green" '+(ok?"":"disabled")+' onclick="sendOffer()">Send Offer</button></div>';
+  if(!ok) h+='<div style="font-size:11px;color:#999;text-align:center;margin-top:4px">Pick at least one item; offer can\'t exceed either player\'s cash.</div>';
+  return h;
+}
+/* ----- responding ----- */
+function tradeViewerRole(){
+  const o=G.trade; if(!o) return null;
+  if(NET.mode==="local") return G.players[o.to].bot ? "proposer" : "recipient";
+  if(mySeat()===o.from) return "proposer";
+  if(mySeat()===o.to) return G.players[o.to].bot ? "spectator" : "recipient";
+  return "spectator";
+}
+function tradeModalHTML(role){
+  const o=G.trade, f=G.players[o.from], t=G.players[o.to];
+  let h='<h2>🤝 Trade Offer</h2>'+tradeSummaryHTML(o);
+  if(role==="recipient"){
+    h+='<div class="cardtxt" style="font-size:12px"><i>'+esc(f.name)+' is offering you this deal.</i></div>'+
+       '<div class="btnrow"><button class="smallbtn" onclick="respondTrade(false)">Decline</button>'+
+       '<button class="bigbtn green" onclick="respondTrade(true)">Accept</button></div>';
+  } else if(role==="proposer"){
+    h+='<div class="cardtxt" style="font-size:12px"><i>'+(t.bot?("🤖 "+esc(t.name)+" is considering…"):("Waiting for "+esc(t.name)+" to respond…"))+'</i></div>'+
+       '<div class="btnrow"><button class="smallbtn" onclick="cancelTrade()">Withdraw</button></div>';
+  } else {
+    h+='<div class="cardtxt" style="font-size:12px"><i>'+esc(f.name)+' and '+esc(t.name)+' are negotiating…</i></div>';
+  }
+  return h;
+}
+function respondTrade(accept){
+  if(!G||!G.trade) return;
+  const a={type:"tradeRespond", accept:!!accept};
+  if(NET.mode==="client"){ if(NET.conn&&NET.conn.open) NET.conn.send({t:"action",a}); return; }
+  dispatchAction(NET.mode==="local"?G.trade.to:mySeat(), a);
+}
+function cancelTrade(){
+  if(!G||!G.trade) return;
+  const a={type:"tradeRespond", accept:false};
+  if(NET.mode==="client"){ if(NET.conn&&NET.conn.open) NET.conn.send({t:"action",a}); return; }
+  dispatchAction(NET.mode==="local"?G.trade.from:mySeat(), a);
+}
+function canTrade(){
+  if(!canControl()||G.pending||G.trade) return false;
+  if(G.phase!=="roll"&&G.phase!=="acted") return false;
+  const cs=ctrlSeat();
+  return G.players.some((p,i)=>i!==cs&&p.alive);
+}
+/* ----- bot trading ----- */
+function stratVal(i, seat){
+  const s=SP[i], st=G.ps[i]; let v=s.p;
+  if(s.t==="prop"){
+    if(completesGroup(seat,i)) v=s.p*3;
+    else { const owned=groupIdx(s.g).filter(j=>j!==i&&G.ps[j].owner===seat).length; if(owned>0) v=s.p*1.6; }
+  } else if(s.t==="rail"){ v=s.p*(1+0.4*railsOwned(seat)); }
+  else if(s.t==="util"){ v=s.p*(1+0.5*utilsOwned(seat)); }
+  if(st.mort) v*=0.55;
+  return v;
+}
+function botRespondTrade(){
+  const o=G.trade; if(!o) return;
+  const bot=o.to;
+  let recv=o.give.cash, give=o.get.cash;
+  o.give.props.forEach(i=>{ recv+=stratVal(i,bot); });
+  o.get.props.forEach(i=>{ give+=stratVal(i,bot); });
+  const t=G.players[bot];
+  const cashAfter=t.cash+o.give.cash-o.get.cash;
+  const accept = tradeValid(o) && cashAfter>=0 && recv>=give*0.98;
+  dispatchAction(bot,{type:"tradeRespond", accept});
+}
+function botMaybeProposeTrade(p){
+  const me=G.cur;
+  if(p.cash<250) return false;
+  if(Math.random()>0.4) return false;
+  let target=-1;
+  SP.forEach((s,i)=>{
+    if(s.t!=="prop") return;
+    const st=G.ps[i];
+    if(!st||st.owner===null||st.owner===me||!G.players[st.owner].alive) return;
+    if(groupHasBuildings(s.g)) return;
+    if(completesGroup(me,i)){ if(target<0||s.p<SP[target].p) target=i; }
+  });
+  if(target<0) return false;
+  const owner=G.ps[target].owner;
+  let offer=Math.min(p.cash-50, Math.round(SP[target].p*1.5)+50);
+  if(offer<Math.round(SP[target].p*0.6)) return false;
+  const o={from:me, to:owner, give:{props:[],cash:offer}, get:{props:[target],cash:0}};
+  if(!tradeValid(o)) return false;
+  G.trade=o;
+  log("🤝 <b>"+esc(p.name)+"</b> offers <b>"+esc(G.players[owner].name)+"</b> "+fmt(offer)+" for <b>"+SP[target].n+"</b>.");
+  return true;
+}
+
 /* =====================  BOTS (run on host)  ===================== */
 let botTok=0;
 function scheduleBot(){
   if(NET.mode==="client"||!G||!G.started||G.over) return;
+  if(G.trade){
+    const r=G.players[G.trade.to];
+    if(r&&r.bot&&r.alive){
+      const tk=++botTok;
+      setTimeout(()=>{ if(tk===botTok&&G&&!G.over&&G.trade&&G.players[G.trade.to]===r&&r.bot&&r.alive) botRespondTrade(); }, 1000);
+    }
+    return;  // while a trade is pending, the current player (even a bot) waits
+  }
   const p=G.players[G.cur];
   if(!p.bot||!p.alive) return;
   const t=++botTok;
-  setTimeout(()=>{ if(t===botTok&&G&&!G.over&&G.players[G.cur]===p&&p.bot&&p.alive) botStep(p); }, 800);
+  setTimeout(()=>{ if(t===botTok&&G&&!G.over&&!G.trade&&G.players[G.cur]===p&&p.bot&&p.alive) botStep(p); }, 800);
 }
 function completesGroup(pi,i){
   const g=SP[i].g; if(!g) return false;
@@ -893,7 +1101,10 @@ function botStep(p){
     }
     return;
   }
-  if(G.phase==="roll"){ botImprove(p); dispatchAction(G.cur,{type:"roll"}); return; }
+  if(G.phase==="roll"){
+    if(!p._triedTrade){ p._triedTrade=true; if(botMaybeProposeTrade(p)){ afterChange(); return; } }
+    botImprove(p); dispatchAction(G.cur,{type:"roll"}); return;
+  }
   if(G.phase==="acted"){ dispatchAction(G.cur,{type:"endTurn"}); return; }
 }
 function botRaiseFunds(p, amt){

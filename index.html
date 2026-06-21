@@ -320,7 +320,7 @@ const TOWNHALL = [
 ];
 const TOKENS = ["🚜","🌽","🐖","🚲","🛻","🌾"];
 const PCOLORS = ["#c0392b","#2c4f8a","#3f7d3a","#e8862d","#7d3a8a","#2b7a78"];
-const BOTNAMES = ["Hank from Humboldt","Betty from Boone","Dan from Denison","Cindy from Clive","Gus from Grinnell","Pearl from Pella"];
+const BOTNAMES = ["Herbert Hoover","John Wayne","Grant Wood","Norman Borlaug","Donna Reed","Glenn Miller"];
 /* =====================  STATE & HELPERS  ===================== */
 let G = null;   // serializable game state (host = source of truth)
 const NET = {mode:"local", peer:null, conn:null, seat:0, code:"", roster:[], dead:false};
@@ -466,13 +466,13 @@ function jailRoll(p){
 function movePlayer(p, steps){
   const old=p.pos;
   p.pos=(p.pos+steps)%40;
-  if(p.pos<old){ p.cash+=200; log("<b>"+esc(p.name)+"</b> passes Announcement Day — collects <b>$200</b> in grassroots donations."); }
+  if(p.pos!==0 && p.pos<old){ p.cash+=200; log("<b>"+esc(p.name)+"</b> passes Announcement Day — collects <b>$200</b> in grassroots donations."); }
   resolveSpace(p, p.pos, {});
 }
 function moveDirectTo(p, dest, opts){
   const old=p.pos;
   p.pos=dest;
-  if(dest<=old){ p.cash+=200; log("<b>"+esc(p.name)+"</b> passes Announcement Day — collects <b>$200</b>."); }
+  if(dest!==0 && dest<=old){ p.cash+=200; log("<b>"+esc(p.name)+"</b> passes Announcement Day — collects <b>$200</b>."); }
   resolveSpace(p, dest, opts||{});
 }
 
@@ -504,7 +504,7 @@ function resolveSpace(p, i, opts){
     case "gotojail":
       log("<b>"+esc(p.name)+"</b> gets pulled into <b>detasseling duty</b>. Straight to the Corn Maze!");
       G.rolledDouble=false; sendToJail(p); G.phase="acted"; return;
-    case "go":   log("<b>"+esc(p.name)+"</b> is at Announcement Day. The crowd chants <i>Iowa First!</i>"); finishAction(p); return;
+    case "go":   p.cash+=400; log("<b>"+esc(p.name)+"</b> lands squarely on <b>Announcement Day</b> — the crowd ROARS! Double grassroots donations: collects <b>$400</b>! <i>Iowa First!</i>"); finishAction(p); return;
     case "free": log("<b>"+esc(p.name)+"</b> takes a RAGBRAI rest day. Pie, pork chops, cold lemonade."); finishAction(p); return;
     case "jail": log("<b>"+esc(p.name)+"</b> is just visiting the Corn Maze. Waves at the lost souls inside."); finishAction(p); return;
     default: finishAction(p);
@@ -877,7 +877,7 @@ function showRules(){
   uiView=null; uiManage=false;
   openModal("<h2>📜 How to Play</h2><div class='cardtxt' style='font-size:14px'>"+
    "Classic roll-and-buy rules with an Iowa twist:<br><br>"+
-   "🎲 <b>Roll</b> and ride the trail. Passing <b>Announcement Day</b> pays $200.<br><br>"+
+   "🎲 <b>Roll</b> and ride the trail. Passing <b>Announcement Day</b> pays $200 — <b>land right on it for $400!</b><br><br>"+
    "🏙️ Land on an unowned town? <b>Buy it</b>. Players who land there pay you support (rent).<br><br>"+
    "🟩 Own a full color region to charge double — then build <b>Yard Signs</b> (up to 4) and a <b>Campaign HQ</b> 🟥 from the <b>Manage</b> panel on your turn.<br><br>"+
    "🛣️ <b>Routes</b> pay more the more you own. <b>Wind Farm & Ethanol Plant</b> pay 4× or 10× the dice.<br><br>"+

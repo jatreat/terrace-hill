@@ -1,0 +1,1118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+<title>Road to Terrace Hill — The Iowa Game</title>
+<script>
+/* PeerJS loader: bundled copy first (js/peerjs.min.js), CDN fallback, else offline-only mode */
+(function(){
+  function cdn(){
+    var s=document.createElement("script");
+    s.src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.5/peerjs.min.js";
+    s.onerror=function(){ window._noPeer=true; };
+    document.head.appendChild(s);
+  }
+  var s=document.createElement("script");
+  s.src="js/peerjs.min.js";
+  s.onerror=cdn;
+  document.head.appendChild(s);
+})();
+</script>
+<style>
+  :root{
+    --cream:#faf6ec; --ink:#2b2218; --barn:#a4343a; --gold:#e8a93c; --corn:#f2c14e;
+    --prairie:#4e7a3a; --sky:#7fb3d5; --panel:#fffdf6; --line:#d8cdb4;
+  }
+  *{box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent;}
+  html,body{overscroll-behavior:none;}
+  body{font-family:Georgia,'Times New Roman',serif; background:var(--cream); color:var(--ink); min-height:100vh;
+       padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);}
+  button{font-family:inherit; cursor:pointer; touch-action:manipulation;}
+  .wrap{display:flex; gap:14px; padding:12px; justify-content:center; flex-wrap:wrap; align-items:flex-start;}
+
+  /* ---------- BOARD ---------- */
+  #board{
+    display:grid; position:relative;
+    grid-template-columns:1.55fr repeat(9,1fr) 1.55fr;
+    grid-template-rows:1.55fr repeat(9,1fr) 1.55fr;
+    width:min(94vmin,780px); aspect-ratio:1;
+    background:#e9f0dc; border:3px solid var(--ink); border-radius:6px;
+    box-shadow:0 4px 18px rgba(43,34,24,.25);
+  }
+  .sp{
+    border:1px solid var(--ink); background:#f4f1e2; position:relative;
+    display:flex; flex-direction:column; overflow:hidden; font-size:clamp(5px,1.05vmin,9px);
+    cursor:pointer; text-align:center;
+  }
+  .sp:hover{outline:2px solid var(--gold); z-index:5;}
+  .sp .bar{height:17%; min-height:8px; border-bottom:1px solid var(--ink); flex:none;}
+  .sp .nm{font-weight:bold; padding:2px 1px 0; line-height:1.12; flex:1; display:flex; align-items:flex-start; justify-content:center;}
+  .sp .pr{padding-bottom:2px; color:#5b4f3c;}
+  .sp .icon{font-size:2.1em; line-height:1; margin-top:1px;}
+  .corner{font-size:clamp(6px,1.3vmin,11px); justify-content:center; align-items:center; gap:2px; padding:2px;}
+  .corner .icon{font-size:2.6em;}
+  .own{position:absolute; top:1px; right:1px; width:.9em; height:.9em; border-radius:50%; border:1px solid var(--ink);}
+  .mortgaged-flag{position:absolute; inset:0; background:rgba(120,120,120,.45); display:flex; align-items:center; justify-content:center; font-weight:bold; color:#fff; font-size:1.4em;}
+  .bld{position:absolute; top:18%; left:1px; font-size:1.25em; line-height:1; text-shadow:0 0 2px #fff;}
+  .tok{position:absolute; bottom:0; left:0; right:0; display:flex; flex-wrap:wrap; justify-content:center; font-size:1.9em; line-height:.95; pointer-events:none; filter:drop-shadow(0 1px 1px rgba(0,0,0,.4));}
+
+  #center{grid-area:2/2/11/11; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; padding:10px; text-align:center; background:repeating-linear-gradient(45deg,#e9f0dc,#e9f0dc 14px,#e4ecd4 14px,#e4ecd4 28px);}
+  #center h1{font-size:clamp(15px,3.4vmin,30px); color:var(--barn); letter-spacing:.5px; text-transform:uppercase;}
+  #center .tag{font-style:italic; font-size:clamp(9px,1.7vmin,14px); color:var(--prairie); max-width:85%;}
+  #dice{display:flex; gap:10px; min-height:46px;}
+  .die{width:clamp(26px,5vmin,46px); aspect-ratio:1; background:#fff; border:2px solid var(--ink); border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:clamp(15px,3vmin,28px); font-weight:bold;}
+  #turnbanner{font-size:clamp(10px,2vmin,16px); font-weight:bold; background:var(--corn); border:2px solid var(--ink); border-radius:6px; padding:4px 12px; max-width:95%;}
+  #centerbtns{display:flex; gap:8px; flex-wrap:wrap; justify-content:center;}
+  .bigbtn{background:var(--barn); color:#fff; border:2px solid var(--ink); border-radius:8px; padding:7px 16px; font-size:clamp(10px,1.9vmin,15px); font-weight:bold;}
+  .bigbtn:disabled{background:#b9a98e; cursor:not-allowed;}
+  .bigbtn.green{background:var(--prairie);}
+  #centermsg{font-size:clamp(9px,1.7vmin,13px); min-height:1.2em; max-width:90%; font-style:italic;}
+
+  /* ---------- SIDEBAR ---------- */
+  #side{width:min(96vw,340px); display:flex; flex-direction:column; gap:10px;}
+  .panel{background:var(--panel); border:2px solid var(--ink); border-radius:8px; padding:10px;}
+  .panel h3{font-size:13px; text-transform:uppercase; letter-spacing:1px; border-bottom:2px solid var(--gold); padding-bottom:4px; margin-bottom:6px; color:var(--barn);}
+  .prow{display:flex; align-items:center; gap:6px; padding:4px 5px; border-radius:6px; font-size:14px;}
+  .prow.cur{background:#fdf3d7; outline:2px solid var(--gold);}
+  .prow .ptok{font-size:20px;}
+  .prow .pname{font-weight:bold; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .prow .pcash{font-weight:bold;}
+  .prow.dead{opacity:.45; text-decoration:line-through;}
+  .pdots{display:flex; gap:2px; flex-wrap:wrap; max-width:90px;}
+  .pdots i{width:9px; height:9px; border-radius:2px; border:1px solid var(--ink); display:inline-block;}
+  .badge{font-size:10px; background:var(--prairie); color:#fff; border-radius:4px; padding:1px 5px; font-weight:bold;}
+  .badge.bot{background:#5b4f3c;}
+  #log{height:170px; overflow-y:auto; font-size:12.5px; line-height:1.45; font-family:'Trebuchet MS',sans-serif;}
+  #log p{padding:1px 0; border-bottom:1px dotted var(--line);}
+  #log p b{color:var(--barn);}
+  .smallbtn{background:var(--panel); border:1.5px solid var(--ink); border-radius:6px; padding:3px 9px; font-size:12px; font-weight:bold;}
+  .smallbtn:hover{background:var(--corn);}
+  .smallbtn:disabled{opacity:.4; cursor:not-allowed;}
+  #netstatus{font-size:11.5px; color:#5b4f3c; text-align:center;}
+
+  /* ---------- MODALS ---------- */
+  .overlay{position:fixed; inset:0; background:rgba(43,34,24,.55); display:flex; align-items:center; justify-content:center; z-index:50; padding:14px;}
+  .modal{background:var(--panel); border:3px solid var(--ink); border-radius:12px; padding:18px; max-width:440px; width:100%; max-height:92vh; overflow-y:auto; box-shadow:0 8px 30px rgba(0,0,0,.4);}
+  .modal h2{color:var(--barn); margin-bottom:8px; font-size:20px;}
+  .modal .cardtxt{font-size:16px; line-height:1.5; margin:10px 0;}
+  .modal .btnrow{display:flex; gap:8px; flex-wrap:wrap; margin-top:14px; justify-content:flex-end;}
+  .cardhead{display:inline-block; background:var(--corn); border:2px solid var(--ink); border-radius:6px; padding:3px 10px; font-weight:bold; font-size:13px; text-transform:uppercase; letter-spacing:1px;}
+  .deed{border:2px solid var(--ink); border-radius:8px; overflow:hidden; margin:8px 0; font-size:13.5px;}
+  .deed .dhead{padding:8px; text-align:center; font-weight:bold; border-bottom:2px solid var(--ink); font-size:15px;}
+  .deed table{width:100%; border-collapse:collapse;}
+  .deed td{padding:3px 10px; border-bottom:1px dotted var(--line);}
+  .deed td:last-child{text-align:right; font-weight:bold;}
+  .hidden{display:none !important;}
+
+  /* ---------- SETUP / LOBBY ---------- */
+  #setup .modal{max-width:540px;}
+  #setup h1{color:var(--barn); text-transform:uppercase; font-size:26px; line-height:1.1;}
+  #setup .sub{font-style:italic; color:var(--prairie); margin:6px 0 10px;}
+  #setup .blurb{font-size:13px; line-height:1.5; background:#f4eeda; border:1.5px solid var(--line); border-radius:8px; padding:10px; margin-bottom:12px;}
+  .lobbybtns{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;}
+  .lobbybtns button{flex:1; min-width:140px; background:var(--panel); border:2px solid var(--ink); border-radius:10px; padding:12px 8px; font-size:14px; font-weight:bold;}
+  .lobbybtns button.selmode{background:var(--corn);}
+  .lobbybtns button:disabled{opacity:.4; cursor:not-allowed;}
+  .setuprow{display:flex; gap:8px; align-items:center; margin:7px 0;}
+  .setuprow input[type=text]{flex:1; padding:7px; font-size:14px; border:1.5px solid var(--ink); border-radius:6px; font-family:inherit;}
+  .setuprow input.codein{text-transform:uppercase; letter-spacing:4px; font-weight:bold; max-width:130px;}
+  .hbtog{min-width:88px;}
+  .hbtog.isbot{background:#5b4f3c; color:#fff;}
+  select{font-size:15px; padding:5px; border:1.5px solid var(--ink); border-radius:6px; font-family:inherit;}
+  .codebox{font-size:34px; letter-spacing:8px; font-weight:bold; text-align:center; background:#fff; border:2px dashed var(--barn); border-radius:10px; padding:10px; margin:10px 0; color:var(--barn);}
+  .rosterrow{display:flex; align-items:center; gap:8px; padding:5px 6px; border-bottom:1px dotted var(--line); font-size:14px;}
+  .rosterrow .rname{flex:1; font-weight:bold;}
+  .statusline{font-size:13px; font-style:italic; color:#5b4f3c; margin-top:8px; min-height:1.2em;}
+  .foot{font-size:10.5px; color:#7a6e57; margin-top:12px; text-align:center; line-height:1.4;}
+</style>
+</head>
+<body>
+
+<!-- SETUP / LOBBY -->
+<div id="setup" class="overlay">
+  <div class="modal">
+    <h1>Road to Terrace Hill</h1>
+    <div class="sub">The Iowa game of grassroots, gravel roads &amp; the Governor's mansion</div>
+    <div class="blurb">
+      Inspired by <b>Zach Lahn's</b> grassroots run for Governor — a sixth-generation Iowa
+      farmer and businessman from Belle Plaine running on <b>Iowa First</b>: family farms,
+      clean water, healthy communities, and a state that answers to its people. Buy towns,
+      plant Yard Signs, open Campaign HQs — last campaign standing takes Terrace Hill!
+    </div>
+    <div class="lobbybtns">
+      <button id="mb-local" onclick="showMode('local')">🎮 Play on this screen</button>
+      <button id="mb-host" onclick="showMode('host')">🌐 Host online game</button>
+      <button id="mb-join" onclick="showMode('join')">🔑 Join with code</button>
+    </div>
+
+    <div id="mode-local" class="modetab hidden">
+      <div class="setuprow">
+        <label for="npl"><b>Seats:</b></label>
+        <select id="npl">
+          <option value="2">2</option><option value="3" selected>3</option>
+          <option value="4">4</option><option value="5">5</option><option value="6">6</option>
+        </select>
+        <span style="font-size:12px;color:#7a6e57;">Switch any seat to 🤖 Bot — bots play themselves.</span>
+      </div>
+      <div id="plrows"></div>
+      <div style="display:flex;justify-content:center;margin-top:14px;">
+        <button class="bigbtn green" style="font-size:17px;padding:10px 30px;" onclick="startLocal()">🌽 Hit the Trail!</button>
+      </div>
+    </div>
+
+    <div id="mode-host" class="modetab hidden">
+      <div class="setuprow">
+        <input type="text" id="hostname" maxlength="14" placeholder="Your name" value="">
+        <button class="bigbtn" id="mkroom" onclick="hostRoom()">Create Room</button>
+      </div>
+      <div id="hostlobby" class="hidden">
+        <div style="text-align:center;font-size:13px;">Friends open this same file, click <b>Join with code</b>, and enter:</div>
+        <div class="codebox" id="codebox">·····</div>
+        <div id="hostroster"></div>
+        <div class="btnrow" style="display:flex;gap:8px;justify-content:center;margin-top:10px;">
+          <button class="smallbtn" onclick="addBot()">+ Add 🤖 Bot</button>
+          <button class="bigbtn green" id="hoststart" onclick="hostStart()" disabled>🌽 Start Game</button>
+        </div>
+      </div>
+      <div class="statusline" id="hoststatus"></div>
+    </div>
+
+    <div id="mode-join" class="modetab hidden">
+      <div class="setuprow">
+        <input type="text" id="joinname" maxlength="14" placeholder="Your name">
+        <input type="text" id="joincode" class="codein" maxlength="5" placeholder="CODE">
+        <button class="bigbtn" id="joinbtn" onclick="joinRoom()">Join</button>
+      </div>
+      <div class="statusline" id="joinstatus"></div>
+    </div>
+
+    <div class="foot">A fan-made family game. Not affiliated with or endorsed by any campaign.<br>
+    Online play is peer-to-peer: the host's screen runs the game; everyone needs this file open in a browser.</div>
+  </div>
+</div>
+
+<!-- MAIN LAYOUT -->
+<div class="wrap">
+  <div id="board">
+    <div id="center">
+      <h1>Road to Terrace Hill</h1>
+      <div class="tag">"Six generations deep. One road to the Hill." — Iowa First!</div>
+      <div id="turnbanner">—</div>
+      <div id="dice"><div class="die" id="d1">?</div><div class="die" id="d2">?</div></div>
+      <div id="centerbtns">
+        <button class="bigbtn" id="rollbtn" onclick="act({type:'roll'})">🎲 Roll</button>
+        <button class="bigbtn green" id="endbtn" onclick="act({type:'endTurn'})" disabled>End Turn</button>
+        <button class="bigbtn" id="rulesbtn" style="background:#5b4f3c" onclick="showRules()">📜 Rules</button>
+        <button class="bigbtn" id="callbtn" style="background:#7a6e57" onclick="callIt()">🔔 Call It</button>
+      </div>
+      <div id="centermsg"></div>
+    </div>
+  </div>
+
+  <div id="side">
+    <div class="panel">
+      <h3>Campaigns</h3>
+      <div id="plist"></div>
+      <div id="netstatus"></div>
+    </div>
+    <div class="panel">
+      <h3>Your Holdings <button class="smallbtn" id="managebtn" style="float:right" onclick="toggleManage()">Manage</button></h3>
+      <div id="holdings" style="font-size:12.5px; line-height:1.5;">—</div>
+    </div>
+    <div class="panel">
+      <h3>Trail Log</h3>
+      <div id="log"></div>
+    </div>
+  </div>
+</div>
+
+<!-- GENERIC MODAL -->
+<div id="modal" class="overlay hidden"><div class="modal" id="modalbody"></div></div>
+
+<script>
+"use strict";
+/* =====================  DATA  ===================== */
+const GROUPS = {
+  brown:  {color:"#8a5a2b"}, ltblue: {color:"#9fd0e8"}, pink: {color:"#d27ba2"},
+  orange: {color:"#e8862d"}, red:    {color:"#c0392b"}, yellow:{color:"#f0c93c"},
+  green:  {color:"#3f7d3a"}, dkblue: {color:"#2c4f8a"},
+};
+const SP = [
+ {t:"go",    n:"ANNOUNCEMENT DAY", icon:"📣"},
+ {t:"prop",  n:"Belle Plaine", g:"brown", p:60,  r:[2,10,30,90,160,250],   hc:50,  sub:"Lahn's hometown"},
+ {t:"chest", n:"Town Hall", icon:"🏛️"},
+ {t:"prop",  n:"Winterset", g:"brown", p:60,  r:[4,20,60,180,320,450],  hc:50,  sub:"Covered bridges"},
+ {t:"tax",   n:"Big Ag Squeeze", amt:200, icon:"🏭", sub:"Pay $200"},
+ {t:"rail",  n:"I-80 Corridor", p:200, icon:"🛣️"},
+ {t:"prop",  n:"Storm Lake", g:"ltblue", p:100, r:[6,30,90,270,400,550],  hc:50,  sub:"Buena Vista Co."},
+ {t:"chance",n:"Caucus Card", icon:"🗳️"},
+ {t:"prop",  n:"Le Mars", g:"ltblue", p:100, r:[6,30,90,270,400,550],  hc:50,  sub:"Ice cream capital"},
+ {t:"prop",  n:"Decorah", g:"ltblue", p:120, r:[8,40,100,300,450,600], hc:50,  sub:"Driftless bluffs"},
+ {t:"jail",  n:"CORN MAZE", icon:"🌽", sub:"Just visiting"},
+ {t:"prop",  n:"Pella", g:"pink", p:140, r:[10,50,150,450,625,750], hc:100, sub:"Tulip Time"},
+ {t:"util",  n:"Wind Farm", p:150, icon:"🌬️"},
+ {t:"prop",  n:"Amana Colonies", g:"pink", p:140, r:[10,50,150,450,625,750], hc:100, sub:"Handcrafted"},
+ {t:"prop",  n:"Field of Dreams", g:"pink", p:160, r:[12,60,180,500,700,900], hc:100, sub:"Dyersville"},
+ {t:"rail",  n:"I-35 Corridor", p:200, icon:"🛣️"},
+ {t:"prop",  n:"Clear Lake", g:"orange", p:180, r:[14,70,200,550,750,950], hc:100, sub:"Surf Ballroom"},
+ {t:"chest", n:"Town Hall", icon:"🏛️"},
+ {t:"prop",  n:"Okoboji", g:"orange", p:180, r:[14,70,200,550,750,950], hc:100, sub:"Iowa's Great Lakes"},
+ {t:"prop",  n:"Cedar Falls", g:"orange", p:200, r:[16,80,220,600,800,1000], hc:100, sub:"Main Street"},
+ {t:"free",  n:"RAGBRAI REST DAY", icon:"🚲", sub:"Free parking"},
+ {t:"prop",  n:"Dubuque", g:"red", p:220, r:[18,90,250,700,875,1050], hc:150, sub:"On the Mississippi"},
+ {t:"chance",n:"Caucus Card", icon:"🗳️"},
+ {t:"prop",  n:"Waterloo", g:"red", p:220, r:[18,90,250,700,875,1050], hc:150, sub:"Cedar Valley"},
+ {t:"prop",  n:"Sioux City", g:"red", p:240, r:[20,100,300,750,925,1100], hc:150, sub:"Loess Hills"},
+ {t:"rail",  n:"Highway 20", p:200, icon:"🛣️"},
+ {t:"prop",  n:"Ames", g:"yellow", p:260, r:[22,110,330,800,975,1150], hc:150, sub:"Cyclone country"},
+ {t:"prop",  n:"Iowa City", g:"yellow", p:260, r:[22,110,330,800,975,1150], hc:150, sub:"Hawkeye country"},
+ {t:"util",  n:"Ethanol Plant", p:150, icon:"⛽"},
+ {t:"prop",  n:"Cedar Rapids", g:"yellow", p:280, r:[24,120,360,850,1025,1200], hc:150, sub:"City of Five Seasons"},
+ {t:"gotojail",n:"GO DETASSEL!", icon:"🚜", sub:"Straight to the Maze"},
+ {t:"prop",  n:"Council Bluffs", g:"green", p:300, r:[26,130,390,900,1100,1275], hc:200, sub:"Western gateway"},
+ {t:"prop",  n:"Quad Cities", g:"green", p:300, r:[26,130,390,900,1100,1275], hc:200, sub:"Mississippi metro"},
+ {t:"chest", n:"Town Hall", icon:"🏛️"},
+ {t:"prop",  n:"West Des Moines", g:"green", p:320, r:[28,150,450,1000,1200,1400], hc:200, sub:"Valley Junction"},
+ {t:"rail",  n:"Great River Road", p:200, icon:"🛣️"},
+ {t:"chance",n:"Caucus Card", icon:"🗳️"},
+ {t:"prop",  n:"East Village", g:"dkblue", p:350, r:[35,175,500,1100,1300,1500], hc:200, sub:"Des Moines"},
+ {t:"tax",   n:"Funnel Cake Tax", amt:100, icon:"🎡", sub:"State Fair! Pay $100"},
+ {t:"prop",  n:"TERRACE HILL", g:"dkblue", p:400, r:[50,200,600,1400,1700,2000], hc:200, sub:"The Governor's mansion"},
+];
+
+const CAUCUS = [
+ {x:"Iowa First rally at the State Capitol! Advance to GO and collect $200.", a:"move", v:0},
+ {x:"The Lahn bus tour rolls by and you hitch a ride. Advance to Terrace Hill!", a:"move", v:39},
+ {x:"You left your clipboard at a diner in Adair. Go back 3 spaces.", a:"back", v:3},
+ {x:"Detasseling Duty! Go directly to the Corn Maze. Do not pass GO, do not collect $200.", a:"jail"},
+ {x:"Advance to the nearest Route. If it's owned, pay the owner double rent.", a:"nearrail"},
+ {x:"Campaign swing along the interstate. Advance to the I-80 Corridor.", a:"move", v:5},
+ {x:"Kitchen-table fundraiser nets $150 — all small-dollar donations, Lahn-style.", a:"get", v:150},
+ {x:"Yard-sign blitz! Pay $25 per Yard Sign and $100 per Campaign HQ for fresh materials.", a:"repair", v:[25,100]},
+ {x:"Your neighbors elect you precinct captain. Collect $50.", a:"get", v:50},
+ {x:"GET OUT OF THE CORN MAZE FREE. Keep this card until needed.", a:"goojf"},
+ {x:"Six generations of farming know-how pays off at the farmers market. Collect $100.", a:"get", v:100},
+ {x:"Flat tire on RAGBRAI. Pay $50 for a new tube and a pork chop.", a:"pay", v:50},
+ {x:"Take the team to the Field of Dreams. If you pass GO, collect $200.", a:"move", v:14},
+ {x:"Caught speeding between county stops on Highway 20. Pay $15.", a:"pay", v:15},
+ {x:"Your clean-water petition goes viral statewide. Collect $100.", a:"get", v:100},
+ {x:"Boat parade on Lake Okoboji! Advance to Okoboji.", a:"move", v:18},
+];
+const TOWNHALL = [
+ {x:"Overflow crowd at your town hall — folks pass the hat. Collect $100.", a:"get", v:100},
+ {x:"Campaign bake sale: your rhubarb pie sweeps the county. Collect $20 from every player.", a:"geteach", v:20},
+ {x:"Big Ag merger blocked — family farms breathe easier. Collect $200.", a:"get", v:200},
+ {x:"The farm co-op pays its annual dividend. Collect $100.", a:"get", v:100},
+ {x:"Your community health fair draws the whole county. Collect $50.", a:"get", v:50},
+ {x:"Vet bill for the hogs. Pay $50.", a:"pay", v:50},
+ {x:"County fair pie contest entry fee. Pay $10.", a:"pay", v:10},
+ {x:"You volunteer at the Butter Cow booth at the State Fair. Collect $25.", a:"get", v:25},
+ {x:"School fundraiser for new band uniforms. Pay $50.", a:"pay", v:50},
+ {x:"You inherit Grandpa's quarter section. Collect $100.", a:"get", v:100},
+ {x:"GET OUT OF THE CORN MAZE FREE. Keep this card until needed.", a:"goojf"},
+ {x:"You wandered off the path. Go directly to the Corn Maze.", a:"jail"},
+ {x:"Storm repairs on the farm: pay $40 per Yard Sign and $115 per Campaign HQ.", a:"repair", v:[40,115]},
+ {x:"An Iowa First small-business grant comes through. Collect $100.", a:"get", v:100},
+ {x:"Your sweet corn stand sells out by noon. Collect $50.", a:"get", v:50},
+ {x:"Wind-turbine lease payment arrives. Collect $150.", a:"get", v:150},
+];
+const TOKENS = ["🚜","🌽","🐖","🚲","🛻","🌾"];
+const PCOLORS = ["#c0392b","#2c4f8a","#3f7d3a","#e8862d","#7d3a8a","#2b7a78"];
+const BOTNAMES = ["Hank from Humboldt","Betty from Boone","Dan from Denison","Cindy from Clive","Gus from Grinnell","Pearl from Pella"];
+/* =====================  STATE & HELPERS  ===================== */
+let G = null;   // serializable game state (host = source of truth)
+const NET = {mode:"local", peer:null, conn:null, seat:0, code:"", roster:[], dead:false};
+
+const $ = id => document.getElementById(id);
+const fmt = n => "$" + n.toLocaleString();
+const esc = s => String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+const isHost = () => NET.mode !== "client";
+
+function ownable(i){ const t=SP[i].t; return t==="prop"||t==="rail"||t==="util"; }
+function groupIdx(g){ return SP.map((s,i)=>s.g===g?i:-1).filter(i=>i>=0); }
+function ownsGroup(pi,g){ return groupIdx(g).every(i=>G.ps[i].owner===pi); }
+function railsOwned(pi){ return SP.reduce((a,s,i)=>a+(s.t==="rail"&&G.ps[i].owner===pi?1:0),0); }
+function utilsOwned(pi){ return SP.reduce((a,s,i)=>a+(s.t==="util"&&G.ps[i].owner===pi?1:0),0); }
+function groupMortFree(g){ return groupIdx(g).every(i=>!G.ps[i].mort); }
+function groupBZero(g){ return groupIdx(g).every(i=>G.ps[i].b===0); }
+function unmortCost(i){ return Math.ceil(SP[i].p/2 * 1.1); }
+function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+function die(){ return 1+Math.floor(Math.random()*6); }
+
+function rentOf(i, dice, railDouble){
+  const s=SP[i], st=G.ps[i];
+  if(st.owner===null||st.mort) return 0;
+  if(s.t==="rail"){ const r=[25,50,100,200][railsOwned(st.owner)-1]; return railDouble? r*2 : r; }
+  if(s.t==="util"){ return dice * (utilsOwned(st.owner)===2 ? 10 : 4); }
+  if(st.b>0) return s.r[st.b];
+  return ownsGroup(st.owner,s.g) ? s.r[0]*2 : s.r[0];
+}
+function netWorth(pi){
+  let w=G.players[pi].cash;
+  SP.forEach((s,i)=>{ const st=G.ps[i]; if(st&&st.owner===pi){
+    if(!st.mort) w += s.p/2;
+    w += st.b*(s.hc||0)/2;
+  }});
+  return w;
+}
+function log(m){ if(!G) return; G.logs.push(m); if(G.logs.length>90) G.logs.shift(); }
+
+function newGame(roster){
+  const players = roster.map((r,i)=>({ name:r.name, bot:!!r.bot, tok:TOKENS[i], color:PCOLORS[i],
+    cash:1500, pos:0, jail:false, jailTurns:0, goojf:0, alive:true }));
+  G = { started:true, players, cur:0, phase:"roll", doubles:0, over:false, winner:null,
+        d1:null, d2:null, lastDice:7, rolledDouble:false, pending:null, logs:[],
+        decks:{ caucus:shuffle(CAUCUS.map((c,x)=>x)), town:shuffle(TOWNHALL.map((c,x)=>x)) },
+        held:{ caucus:[], town:[] },
+        ps:SP.map(s=>(s.t==="prop"||s.t==="rail"||s.t==="util")?{owner:null,b:0,mort:false}:null) };
+  log("🌽 <b>The race for Terrace Hill begins!</b> Every campaign starts with $1,500. Iowa First!");
+  log("— <b>"+esc(players[0].name)+"</b>'s turn —");
+}
+
+/* =====================  DISPATCH (host only)  ===================== */
+function dispatchAction(seat, a){
+  if(!G || !G.started || G.over) return;
+  if(seat!==G.cur) return;
+  const p = G.players[G.cur];
+  if(!p.alive) return;
+  const pd = G.pending;
+  switch(a.type){
+    case "roll":     if(!pd && G.phase==="roll") actRoll(p); break;
+    case "jailCard": if(pd&&pd.k==="jail"&&p.goojf>0){ p.goojf--; returnHeldCard(); p.jail=false; G.pending=null;
+                       log("<b>"+esc(p.name)+"</b> uses a Get Out of the Corn Maze Free card! 🎫"); rollMove(p); } break;
+    case "jailPay":  if(pd&&pd.k==="jail"&&p.cash>=50){ p.cash-=50; p.jail=false; G.pending=null;
+                       log("<b>"+esc(p.name)+"</b> pays $50 to the kid running the maze and walks out."); rollMove(p); } break;
+    case "jailRoll": if(pd&&pd.k==="jail") jailRoll(p); break;
+    case "buy":      if(pd&&pd.k==="buy") doBuy(p, pd.i); break;
+    case "passBuy":  if(pd&&pd.k==="buy"){ log("<b>"+esc(p.name)+"</b> passes on "+SP[pd.i].n+"."); G.pending=null; finishAction(p); } break;
+    case "cardOk":   if(pd&&pd.k==="card"){ G.pending=null; applyCard(p, pd.deck, pd.ci); } break;
+    case "build":    if(!pd) build(p, a.i); break;
+    case "sell":     if(!pd||pd.k==="debt") sellB(p, a.i); break;
+    case "mort":     if(!pd||pd.k==="debt") mort(p, a.i); break;
+    case "unmort":   if(!pd) unmort(p, a.i); break;
+    case "payDebt":  if(pd&&pd.k==="debt"&&p.cash>=pd.amt) settleDebt(p); break;
+    case "concede":  if(pd&&pd.k==="debt") bankrupt(p, pd.to); break;
+    case "endTurn":  if(!pd&&G.phase==="acted") endTurn(); break;
+  }
+  afterChange();
+}
+
+function actRoll(p){
+  if(p.jail){ G.pending={k:"jail"}; return; }
+  const d1=die(), d2=die();
+  G.d1=d1; G.d2=d2; G.lastDice=d1+d2;
+  G.rolledDouble = d1===d2;
+  if(G.rolledDouble) G.doubles++; else G.doubles=0;
+  if(G.doubles===3){
+    G.doubles=0; G.rolledDouble=false;
+    log("<b>"+esc(p.name)+"</b> rolled three doubles in a row — reckless driving on a gravel road. <b>Into the Corn Maze!</b>");
+    sendToJail(p); G.phase="acted"; return;
+  }
+  log("<b>"+esc(p.name)+"</b> rolls "+d1+" + "+d2+" = <b>"+(d1+d2)+"</b>"+(G.rolledDouble?" — doubles!":""));
+  movePlayer(p, d1+d2);
+}
+function rollMove(p){  // fresh roll after leaving jail (no doubles re-roll)
+  const d1=die(), d2=die();
+  G.d1=d1; G.d2=d2; G.lastDice=d1+d2; G.rolledDouble=false;
+  log("<b>"+esc(p.name)+"</b> rolls "+d1+" + "+d2+" = <b>"+(d1+d2)+"</b>.");
+  movePlayer(p, d1+d2);
+}
+function jailRoll(p){
+  const d1=die(), d2=die();
+  G.d1=d1; G.d2=d2; G.lastDice=d1+d2;
+  if(d1===d2){
+    p.jail=false; G.pending=null; G.rolledDouble=false;
+    log("<b>"+esc(p.name)+"</b> rolls doubles ("+d1+"s) and sprints out of the Corn Maze!");
+    movePlayer(p, d1+d2); return;
+  }
+  p.jailTurns++;
+  if(p.jailTurns>=3){
+    p.jail=false; G.pending=null; G.rolledDouble=false;
+    log("<b>"+esc(p.name)+"</b> has wandered long enough — owes $50 to exit the maze.");
+    if(p.cash>=50){ p.cash-=50; movePlayer(p, d1+d2); }
+    else if(netWorth(G.cur)>=50){ G.pending={k:"debt", amt:50, to:null, label:"maze exit fee", then:{move:d1+d2}}; }
+    else bankrupt(p, null);
+  } else {
+    G.pending=null; G.rolledDouble=false;
+    log("<b>"+esc(p.name)+"</b> rolls "+d1+" + "+d2+" — still lost in the corn.");
+    G.phase="acted";
+  }
+}
+
+function movePlayer(p, steps){
+  const old=p.pos;
+  p.pos=(p.pos+steps)%40;
+  if(p.pos<old){ p.cash+=200; log("<b>"+esc(p.name)+"</b> passes Announcement Day — collects <b>$200</b> in grassroots donations."); }
+  resolveSpace(p, p.pos, {});
+}
+function moveDirectTo(p, dest, opts){
+  const old=p.pos;
+  p.pos=dest;
+  if(dest<=old){ p.cash+=200; log("<b>"+esc(p.name)+"</b> passes Announcement Day — collects <b>$200</b>."); }
+  resolveSpace(p, dest, opts||{});
+}
+
+function resolveSpace(p, i, opts){
+  const s=SP[i];
+  if(ownable(i)){
+    const st=G.ps[i];
+    if(st.owner===null){
+      if(p.cash>=s.p){ G.pending={k:"buy", i}; }
+      else { log("<b>"+esc(p.name)+"</b> can't afford <b>"+s.n+"</b> ("+fmt(s.p)+"). It stays open."); finishAction(p); }
+      return;
+    }
+    if(st.owner!==G.cur && !st.mort){
+      const rent=rentOf(i, G.lastDice, opts.railDouble);
+      log("<b>"+esc(p.name)+"</b> lands on <b>"+s.n+"</b> — owes "+fmt(rent)+" to <b>"+esc(G.players[st.owner].name)+"</b>.");
+      charge(p, rent, st.owner, "rent for "+s.n);
+      return;
+    }
+    if(st.owner===G.cur) log("<b>"+esc(p.name)+"</b> visits their own stop at <b>"+s.n+"</b>. Friendly faces!");
+    else log("<b>"+esc(p.name)+"</b> lands on mortgaged <b>"+s.n+"</b> — no rent due.");
+    finishAction(p); return;
+  }
+  switch(s.t){
+    case "tax":
+      log("<b>"+esc(p.name)+"</b> hits <b>"+s.n+"</b> — pays "+fmt(s.amt)+".");
+      charge(p, s.amt, null, s.n); return;
+    case "chance": drawCard(p,"caucus"); return;
+    case "chest":  drawCard(p,"town");  return;
+    case "gotojail":
+      log("<b>"+esc(p.name)+"</b> gets pulled into <b>detasseling duty</b>. Straight to the Corn Maze!");
+      G.rolledDouble=false; sendToJail(p); G.phase="acted"; return;
+    case "go":   log("<b>"+esc(p.name)+"</b> is at Announcement Day. The crowd chants <i>Iowa First!</i>"); finishAction(p); return;
+    case "free": log("<b>"+esc(p.name)+"</b> takes a RAGBRAI rest day. Pie, pork chops, cold lemonade."); finishAction(p); return;
+    case "jail": log("<b>"+esc(p.name)+"</b> is just visiting the Corn Maze. Waves at the lost souls inside."); finishAction(p); return;
+    default: finishAction(p);
+  }
+}
+function finishAction(p){
+  if(G.over) return;
+  G.phase = (G.rolledDouble && p.alive && !p.jail) ? "roll" : "acted";
+}
+function endTurn(){
+  G.doubles=0; G.rolledDouble=false; G.pending=null;
+  do{ G.cur=(G.cur+1)%G.players.length; }while(!G.players[G.cur].alive);
+  G.phase="roll";
+  log("— <b>"+esc(G.players[G.cur].name)+"</b>'s turn —");
+}
+
+/* =====================  MONEY  ===================== */
+function charge(p, amt, to, label){
+  if(p.cash>=amt){
+    p.cash-=amt; if(to!==null) G.players[to].cash+=amt;
+    finishAction(p); return;
+  }
+  if(netWorth(G.cur)<amt){ bankrupt(p, to); return; }
+  log("<b>"+esc(p.name)+"</b> needs "+fmt(amt)+" — time to sell signs or mortgage towns.");
+  G.pending={k:"debt", amt, to, label};
+}
+function settleDebt(p){
+  const d=G.pending;
+  p.cash-=d.amt; if(d.to!==null) G.players[d.to].cash+=d.amt;
+  log("<b>"+esc(p.name)+"</b> pays "+fmt(d.amt)+" for "+d.label+".");
+  G.pending=null;
+  if(d.then&&d.then.move) movePlayer(p, d.then.move);
+  else finishAction(p);
+}
+function doBuy(p, i){
+  const s=SP[i];
+  if(p.cash<s.p) return;
+  p.cash-=s.p; G.ps[i].owner=G.cur; G.pending=null;
+  log("<b>"+esc(p.name)+"</b> opens a campaign stop in <b>"+s.n+"</b> for "+fmt(s.p)+"!");
+  finishAction(p);
+}
+function bankrupt(p, to){
+  G.pending=null;
+  const heir = to!==null ? G.players[to] : null;
+  log("💥 <b>"+esc(p.name)+"</b>'s campaign is out of money — <b>bankrupt!</b>" +
+      (heir? " Everything goes to <b>"+esc(heir.name)+"</b>." : " Holdings return to the bank."));
+  G.ps.forEach((st,i)=>{ if(st&&st.owner===G.cur){
+    if(heir){ if(st.b>0){ heir.cash+=st.b*SP[i].hc/2; st.b=0; } st.owner=to; }
+    else { st.owner=null; st.b=0; st.mort=false; }
+  }});
+  if(heir&&p.cash>0) heir.cash+=p.cash;
+  while(p.goojf>0){ p.goojf--; returnHeldCard(); }
+  p.cash=0; p.alive=false; p.jail=false;
+  if(!checkWin()){ G.rolledDouble=false; G.phase="acted"; endTurn(); }
+}
+function checkWin(){
+  const alive=G.players.filter(q=>q.alive);
+  if(alive.length===1){
+    G.over=true; G.winner=G.players.indexOf(alive[0]);
+    log("🏆 <b>"+esc(alive[0].name)+"</b> is the last campaign standing and takes the Road to Terrace Hill all the way home!");
+    return true;
+  }
+  return false;
+}
+
+/* =====================  CARDS  ===================== */
+function drawCard(p, deckName){
+  const deck=G.decks[deckName];
+  const ci=deck.shift();
+  const card=(deckName==="caucus"?CAUCUS:TOWNHALL)[ci];
+  if(card.a!=="goojf") deck.push(ci); else G.held[deckName].push(ci);
+  G.pending={k:"card", deck:deckName, ci};
+}
+function returnHeldCard(){
+  if(G.held.caucus.length) G.decks.caucus.push(G.held.caucus.shift());
+  else if(G.held.town.length) G.decks.town.push(G.held.town.shift());
+}
+function applyCard(p, deckName, ci){
+  const c=(deckName==="caucus"?CAUCUS:TOWNHALL)[ci];
+  switch(c.a){
+    case "get": p.cash+=c.v; log("<b>"+esc(p.name)+"</b> collects "+fmt(c.v)+"."); finishAction(p); break;
+    case "pay": charge(p, c.v, null, "the card"); break;
+    case "geteach": {
+      let total=0;
+      G.players.forEach((q,qi)=>{ if(qi!==G.cur&&q.alive){ const amt=Math.min(q.cash,c.v); q.cash-=amt; total+=amt; }});
+      p.cash+=total;
+      log("<b>"+esc(p.name)+"</b> collects "+fmt(total)+" from the other campaigns.");
+      finishAction(p); break;
+    }
+    case "repair": {
+      let signs=0, hqs=0;
+      G.ps.forEach((st,i)=>{ if(st&&st.owner===G.cur){ if(st.b===5) hqs++; else signs+=st.b; }});
+      const cost=signs*c.v[0]+hqs*c.v[1];
+      if(cost>0){ log("Materials bill: "+signs+" sign(s), "+hqs+" HQ(s) → "+fmt(cost)+"."); charge(p, cost, null, "materials"); }
+      else { log("No signs up yet — nothing to pay."); finishAction(p); }
+      break;
+    }
+    case "move": moveDirectTo(p, c.v, {}); break;
+    case "back": p.pos=(p.pos-c.v+40)%40; resolveSpace(p, p.pos, {}); break;
+    case "jail": G.rolledDouble=false; sendToJail(p); G.phase="acted"; break;
+    case "goojf": p.goojf++; log("<b>"+esc(p.name)+"</b> pockets a 🎫 Get Out of the Corn Maze Free card."); finishAction(p); break;
+    case "nearrail": {
+      const dest=[5,15,25,35].find(r=>r>p.pos) ?? 5;
+      moveDirectTo(p, dest, {railDouble:true}); break;
+    }
+    default: finishAction(p);
+  }
+}
+function sendToJail(p){ p.pos=10; p.jail=true; p.jailTurns=0; G.doubles=0; }
+
+/* =====================  MANAGE (build/sell/mortgage)  ===================== */
+function build(p, i){
+  const s=SP[i], st=G.ps[i];
+  if(!st||s.t!=="prop"||st.owner!==G.cur||st.mort||st.b>=5) return;
+  if(!ownsGroup(G.cur,s.g)||!groupMortFree(s.g)||p.cash<s.hc) return;
+  p.cash-=s.hc; st.b++;
+  log("<b>"+esc(p.name)+"</b> "+(st.b===5?"opens a <b>Campaign HQ</b> in":"plants a Yard Sign in")+" <b>"+s.n+"</b>.");
+}
+function sellB(p, i){
+  const st=G.ps[i];
+  if(!st||st.owner!==G.cur||st.b<=0) return;
+  st.b--; p.cash+=SP[i].hc/2;
+  log("<b>"+esc(p.name)+"</b> takes down a sign in "+SP[i].n+" for "+fmt(SP[i].hc/2)+".");
+}
+function mort(p, i){
+  const st=G.ps[i];
+  if(!st||st.owner!==G.cur||st.mort||st.b>0) return;
+  if(SP[i].g&&!groupBZero(SP[i].g)) return;
+  st.mort=true; p.cash+=SP[i].p/2;
+  log("<b>"+esc(p.name)+"</b> mortgages "+SP[i].n+" for "+fmt(SP[i].p/2)+".");
+}
+function unmort(p, i){
+  const st=G.ps[i], c=unmortCost(i);
+  if(!st||st.owner!==G.cur||!st.mort||p.cash<c) return;
+  st.mort=false; p.cash-=c;
+  log("<b>"+esc(p.name)+"</b> lifts the mortgage on "+SP[i].n+".");
+}
+/* =====================  UI / RENDER  ===================== */
+const spaceEls=[];
+let uiManage=false, uiView=null;
+
+function coordFor(i){
+  if(i<=10) return [11, 11-i];
+  if(i<=20) return [11-(i-10), 1];
+  if(i<=30) return [1, 1+(i-20)];
+  return [1+(i-30), 11];
+}
+function buildBoard(){
+  const board=$("board");
+  SP.forEach((s,i)=>{
+    const d=document.createElement("div");
+    const [r,c]=coordFor(i);
+    d.style.gridRow=r; d.style.gridColumn=c;
+    d.className="sp"+((i%10===0)?" corner":"");
+    let inner="";
+    if(s.t==="prop") inner='<div class="bar" style="background:'+GROUPS[s.g].color+'"></div><div class="nm">'+s.n+'</div><div class="pr">$'+s.p+'</div>';
+    else if(s.t==="rail"||s.t==="util") inner='<div class="icon">'+s.icon+'</div><div class="nm">'+s.n+'</div><div class="pr">$'+s.p+'</div>';
+    else if(s.t==="tax") inner='<div class="icon">'+s.icon+'</div><div class="nm">'+s.n+'</div><div class="pr">Pay $'+s.amt+'</div>';
+    else if(s.t==="chance"||s.t==="chest") inner='<div class="icon">'+s.icon+'</div><div class="nm">'+s.n+'</div>';
+    else inner='<div class="icon">'+s.icon+'</div><div class="nm">'+s.n+'</div>'+(s.sub?'<div class="pr">'+s.sub+'</div>':"");
+    d.innerHTML=inner+'<div class="tok" id="tok'+i+'"></div>';
+    d.onclick=()=>{ if(G&&G.started){ uiView=i; renderAll(); } };
+    board.appendChild(d); spaceEls.push(d);
+  });
+}
+
+function mySeat(){ return NET.mode==="client" ? NET.seat : (NET.mode==="host" ? 0 : (G?G.cur:0)); }
+function ctrlSeat(){ return NET.mode==="local" ? (G?G.cur:0) : mySeat(); }
+function canControl(){ return !!G && G.started && !G.over && G.cur===ctrlSeat() && !G.players[G.cur].bot; }
+function act(a){
+  if(!G||!G.started||G.over) return;
+  if(NET.mode==="client"){ if(NET.conn&&NET.conn.open&&canControl()) NET.conn.send({t:"action",a}); return; }
+  if(G.players[G.cur].bot) return;
+  dispatchAction(ctrlSeat(), a);
+}
+function __act(t,i){ act(i===undefined?{type:t}:{type:t,i:i}); }
+function toggleManage(){ uiManage=!uiManage; renderAll(); }
+function closeView(){ uiView=null; renderAll(); }
+
+function afterChange(){   // host: after every dispatched action
+  if(NET.mode==="host") broadcastState();
+  renderAll();
+  scheduleBot();
+}
+
+function renderAll(){
+  if(!G||!G.started) return;
+  SP.forEach((s,i)=>{
+    const el=spaceEls[i];
+    el.querySelectorAll(".own,.bld,.mortgaged-flag").forEach(x=>x.remove());
+    const st=G.ps[i];
+    if(st&&st.owner!==null){
+      const o=document.createElement("div");
+      o.className="own"; o.style.background=G.players[st.owner].color;
+      el.appendChild(o);
+      if(st.b>0){
+        const b=document.createElement("div"); b.className="bld";
+        b.textContent= st.b===5 ? "🟥" : "🟩".repeat(st.b);
+        el.appendChild(b);
+      }
+      if(st.mort){
+        const m=document.createElement("div"); m.className="mortgaged-flag"; m.textContent="✕";
+        el.appendChild(m);
+      }
+    }
+    const tk=$("tok"+i); tk.innerHTML="";
+    G.players.forEach(p=>{ if(p.alive&&p.pos===i) tk.innerHTML+=p.tok; });
+  });
+  // dice
+  $("d1").textContent = G.d1===null?"?":G.d1;
+  $("d2").textContent = G.d2===null?"?":G.d2;
+  // players panel
+  const pl=$("plist"); pl.innerHTML="";
+  G.players.forEach((p,pi)=>{
+    const row=document.createElement("div");
+    row.className="prow"+(pi===G.cur?" cur":"")+(p.alive?"":" dead");
+    const dots=SP.map((s,i)=>{ const st=G.ps[i];
+      return (st&&st.owner===pi) ? '<i style="background:'+(s.g?GROUPS[s.g].color:"#999")+'"></i>' : ""; }).join("");
+    row.innerHTML='<span class="ptok">'+p.tok+'</span><span class="pname" style="color:'+p.color+'">'+esc(p.name)+'</span>'+
+      (p.bot?'<span class="badge bot">🤖</span>':"")+
+      (NET.mode!=="local"&&pi===mySeat()?'<span class="badge">YOU</span>':"")+
+      '<span class="pdots">'+dots+'</span><span class="pcash">'+fmt(p.cash)+'</span>'+
+      (p.jail?' <span title="In the Corn Maze">🌽🔒</span>':"")+(p.goojf>0?' <span>🎫</span>':"");
+    pl.appendChild(row);
+  });
+  // net status
+  $("netstatus").textContent =
+    NET.mode==="host" ? "🌐 Hosting room "+NET.code+(NET.dead?" (connection lost)":"") :
+    NET.mode==="client" ? (NET.dead?"⚠️ Lost connection to host":"🌐 In room "+NET.code) : "";
+  // holdings (your seat online; current seat local)
+  const hs = NET.mode==="local" ? G.cur : mySeat();
+  const mine=SP.map((s,i)=>{ const st=G.ps[i];
+    return (st&&st.owner===hs) ? (s.n+(st.mort?" (mortg.)":"")+(st.b?" "+(st.b===5?"HQ🟥":st.b+"🟩"):"")) : null; }).filter(Boolean);
+  $("holdings").innerHTML = mine.length? mine.join(" • ") : "<i>No towns yet — get rolling!</i>";
+  $("managebtn").disabled = !canControl();
+  $("callbtn").style.display = NET.mode==="client" ? "none" : "";
+  // banner + buttons + message
+  const cp=G.players[G.cur];
+  $("turnbanner").textContent = (canControl()&&NET.mode!=="local" ? "YOUR TURN — " : "") + cp.tok+" "+cp.name+" — "+fmt(cp.cash);
+  $("turnbanner").style.background=cp.color; $("turnbanner").style.color="#fff";
+  $("rollbtn").disabled = !(canControl() && G.phase==="roll" && !G.pending);
+  $("endbtn").disabled  = !(canControl() && G.phase==="acted" && !G.pending);
+  let m="";
+  if(G.over) m="🏆 "+G.players[G.winner].name+" wins!";
+  else if(!canControl()) m = cp.bot ? cp.name+" 🤖 is on the move…" : "Waiting for "+cp.name+"…";
+  else if(G.pending&&G.pending.k==="card") m="";
+  else if(G.phase==="roll") m=G.rolledDouble?"Doubles — roll again!":"Your roll.";
+  if(G.pending&&G.pending.k==="card"&&!canControl()){
+    const c=(G.pending.deck==="caucus"?CAUCUS:TOWNHALL)[G.pending.ci];
+    m="📜 "+cp.name+" drew: “"+c.x+"”";
+  }
+  $("centermsg").textContent=m;
+  // log
+  $("log").innerHTML = G.logs.slice().reverse().map(x=>"<p>"+x+"</p>").join("");
+  renderModal();
+}
+
+/* ----- modal rendering from state ----- */
+function openModal(html){ $("modalbody").innerHTML=html; $("modal").classList.remove("hidden"); }
+function hideModal(){ $("modal").classList.add("hidden"); }
+
+function renderModal(){
+  if(!G||!G.started){ hideModal(); return; }
+  if(!canControl()) uiManage=false;
+  if(G.over){
+    const w=G.players[G.winner];
+    openModal("<h2>🏆 Victory!</h2><div class='cardtxt'><b>"+esc(w.name)+" "+w.tok+
+      "</b> is the last campaign standing and rides the Road to Terrace Hill all the way home.<br><br>"+
+      "<i>Six generations deep. Iowa First — Iowa always.</i> 🌽</div>"+
+      "<div class='btnrow'><button class='bigbtn green' onclick='location.reload()'>Play Again</button></div>");
+    return;
+  }
+  const pd=G.pending, mine=canControl();
+  if(pd&&mine){
+    if(pd.k==="buy"){
+      const s=SP[pd.i];
+      openModal(deedHTML(pd.i)+'<div class="btnrow">'+
+        '<button class="smallbtn" onclick="__act(\'passBuy\')">Pass</button>'+
+        '<button class="bigbtn green" onclick="__act(\'buy\')">Buy for '+fmt(s.p)+'</button></div>');
+      return;
+    }
+    if(pd.k==="card"){
+      const c=(pd.deck==="caucus"?CAUCUS:TOWNHALL)[pd.ci];
+      openModal('<span class="cardhead">'+(pd.deck==="caucus"?"🗳️ Caucus Card":"🏛️ Town Hall Card")+'</span>'+
+        '<div class="cardtxt">'+c.x+'</div><div class="btnrow"><button class="bigbtn" onclick="__act(\'cardOk\')">OK</button></div>');
+      return;
+    }
+    if(pd.k==="jail"){
+      const p=G.players[G.cur];
+      let h="<h2>🌽 Stuck in the Corn Maze</h2><div class='cardtxt'>Turn "+(p.jailTurns+1)+" of 3 in the maze. How do you get out?</div><div class='btnrow'>";
+      if(p.goojf>0) h+='<button class="bigbtn green" onclick="__act(\'jailCard\')">Use 🎫</button>';
+      if(p.cash>=50) h+='<button class="bigbtn" onclick="__act(\'jailPay\')">Pay $50</button>';
+      h+='<button class="bigbtn" onclick="__act(\'jailRoll\')">Roll for doubles</button></div>';
+      openModal(h); return;
+    }
+    if(pd.k==="debt"){ openModal(manageHTML(true)); return; }
+  }
+  if(mine&&uiManage&&!pd){ openModal(manageHTML(false)); return; }
+  if(uiView!==null){ openModal(viewHTML(uiView)); return; }
+  hideModal();
+}
+
+function deedHTML(i){
+  const s=SP[i], st=G.ps[i];
+  let rows="";
+  if(s.t==="prop"){
+    rows="<tr><td>Base support (rent)</td><td>$"+s.r[0]+"</td></tr>"+
+      "<tr><td>…with full region</td><td>$"+(s.r[0]*2)+"</td></tr>"+
+      [1,2,3,4].map(n=>"<tr><td>With "+n+" Yard Sign"+(n>1?"s":"")+"</td><td>$"+s.r[n]+"</td></tr>").join("")+
+      "<tr><td>With Campaign HQ</td><td>$"+s.r[5]+"</td></tr>"+
+      "<tr><td>Yard Sign cost</td><td>$"+s.hc+"</td></tr><tr><td>Mortgage value</td><td>$"+(s.p/2)+"</td></tr>";
+  } else if(s.t==="rail"){
+    rows="<tr><td>1 Route owned</td><td>$25</td></tr><tr><td>2 Routes</td><td>$50</td></tr>"+
+         "<tr><td>3 Routes</td><td>$100</td></tr><tr><td>4 Routes</td><td>$200</td></tr><tr><td>Mortgage value</td><td>$100</td></tr>";
+  } else if(s.t==="util"){
+    rows="<tr><td>1 utility owned</td><td>4 × dice roll</td></tr><tr><td>Both utilities</td><td>10 × dice roll</td></tr><tr><td>Mortgage value</td><td>$75</td></tr>";
+  }
+  const ownTxt = st&&st.owner!==null ? "Owned by "+esc(G.players[st.owner].name) : "Unowned";
+  const barCol = s.g?GROUPS[s.g].color:"#c9bd9c";
+  return '<div class="deed"><div class="dhead" style="background:'+barCol+';color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.5)">'+
+    s.n+(s.sub?'<div style="font-size:11px;font-weight:normal">'+s.sub+'</div>':"")+'</div><table>'+rows+'</table></div>'+
+    '<div style="font-size:13px;text-align:center">'+ownTxt+(st&&st.mort?" — <b>MORTGAGED</b>":"")+
+    (st&&st.b?" — "+(st.b===5?"Campaign HQ built":st.b+" Yard Sign(s)"):"")+'</div>';
+}
+function viewHTML(i){
+  const s=SP[i];
+  const blurb={go:"Collect $200 in grassroots donations every time you pass.",
+    jail:"Lost in the corn. Pay $50, roll doubles, or use a 🎫 to get out.",
+    free:"Free space. Enjoy a slice of pie — you've earned it.",
+    gotojail:"Go directly to the Corn Maze. Do not pass GO.",
+    chance:"Draw a Caucus Card.", chest:"Draw a Town Hall Card.", tax:"Pay the bank."}[s.t]||"";
+  const body = ownable(i) ? deedHTML(i) : "<h2>"+s.n+"</h2><div class='cardtxt'>"+(s.sub||blurb)+"</div>";
+  return body+"<div class='btnrow'><button class='bigbtn' onclick='closeView()'>OK</button></div>";
+}
+function manageHTML(isDebt){
+  const p=G.players[G.cur], pd=G.pending;
+  let h="<h2>"+p.tok+" "+esc(p.name)+" — "+fmt(p.cash)+"</h2>";
+  if(isDebt&&pd) h+='<div class="cardtxt" style="color:#a4343a"><b>Owed: '+fmt(pd.amt)+'</b> ('+pd.label+'). Sell or mortgage to raise funds.</div>';
+  const mine=SP.map((s,i)=>G.ps[i]&&G.ps[i].owner===G.cur?i:-1).filter(i=>i>=0);
+  if(!mine.length) h+="<div class='cardtxt'><i>No holdings yet.</i></div>";
+  mine.forEach(i=>{
+    const s=SP[i], st=G.ps[i], col=s.g?GROUPS[s.g].color:"#999";
+    h+='<div style="display:flex;align-items:center;gap:6px;border-bottom:1px dotted var(--line);padding:5px 0;font-size:13px;">'+
+      '<i style="width:12px;height:12px;background:'+col+';border:1px solid var(--ink);border-radius:3px;flex:none"></i>'+
+      '<span style="flex:1"><b>'+s.n+'</b>'+(st.mort?" <i>(mortgaged)</i>":"")+(st.b?" — "+(st.b===5?"HQ 🟥":st.b+" 🟩"):"")+'</span>';
+    if(!isDebt && s.t==="prop" && !st.mort && ownsGroup(G.cur,s.g) && groupMortFree(s.g) && st.b<5 && p.cash>=s.hc)
+      h+='<button class="smallbtn" onclick="__act(\'build\','+i+')">+🟩 $'+s.hc+'</button>';
+    if(st.b>0)
+      h+='<button class="smallbtn" onclick="__act(\'sell\','+i+')">Sell 🟩 +$'+(s.hc/2)+'</button>';
+    if(st.b===0 && !st.mort && (!s.g||groupBZero(s.g)))
+      h+='<button class="smallbtn" onclick="__act(\'mort\','+i+')">Mortg. +$'+(s.p/2)+'</button>';
+    if(!isDebt && st.mort && p.cash>=unmortCost(i))
+      h+='<button class="smallbtn" onclick="__act(\'unmort\','+i+')">Unmortg. $'+unmortCost(i)+'</button>';
+    h+='</div>';
+  });
+  h+='<div class="btnrow">';
+  if(isDebt&&pd){
+    if(p.cash>=pd.amt) h+='<button class="bigbtn green" onclick="__act(\'payDebt\')">Pay '+fmt(pd.amt)+'</button>';
+    h+='<button class="smallbtn" onclick="__act(\'concede\')">Concede (bankrupt)</button>';
+  } else {
+    h+='<button class="bigbtn" onclick="toggleManage()">Done</button>';
+  }
+  return h+'</div>';
+}
+function showRules(){
+  uiView=null; uiManage=false;
+  openModal("<h2>📜 How to Play</h2><div class='cardtxt' style='font-size:14px'>"+
+   "Classic roll-and-buy rules with an Iowa twist:<br><br>"+
+   "🎲 <b>Roll</b> and ride the trail. Passing <b>Announcement Day</b> pays $200.<br><br>"+
+   "🏙️ Land on an unowned town? <b>Buy it</b>. Players who land there pay you support (rent).<br><br>"+
+   "🟩 Own a full color region to charge double — then build <b>Yard Signs</b> (up to 4) and a <b>Campaign HQ</b> 🟥 from the <b>Manage</b> panel on your turn.<br><br>"+
+   "🛣️ <b>Routes</b> pay more the more you own. <b>Wind Farm & Ethanol Plant</b> pay 4× or 10× the dice.<br><br>"+
+   "🌽 <b>Corn Maze</b>: pay $50, roll doubles, or use a 🎫. Three doubles in a row sends you in.<br><br>"+
+   "💰 Can't pay? Sell signs and mortgage towns — or go bankrupt. <b>Last campaign standing wins Terrace Hill!</b><br><br>"+
+   "🌐 <b>Online:</b> one player hosts and shares the 5-letter code; everyone opens this same file and joins. If someone disconnects, a 🤖 takes over their campaign. Bots can also fill empty seats — or play a full solo game against three of them.<br><br>"+
+   "<i>House rules: even-building isn't enforced; RAGBRAI Rest Day pays nothing. Your table, your vote — it's Iowa.</i>"+
+   "</div><div class='btnrow'><button class='bigbtn' onclick='rulesDone()'>Got it</button></div>");
+}
+/* =====================  BOTS (run on host)  ===================== */
+let botTok=0;
+function scheduleBot(){
+  if(NET.mode==="client"||!G||!G.started||G.over) return;
+  const p=G.players[G.cur];
+  if(!p.bot||!p.alive) return;
+  const t=++botTok;
+  setTimeout(()=>{ if(t===botTok&&G&&!G.over&&G.players[G.cur]===p&&p.bot&&p.alive) botStep(p); }, 800);
+}
+function completesGroup(pi,i){
+  const g=SP[i].g; if(!g) return false;
+  return groupIdx(g).every(j=>j===i||G.ps[j].owner===pi);
+}
+function botStep(p){
+  const pd=G.pending;
+  if(pd){
+    if(pd.k==="card"){ dispatchAction(G.cur,{type:"cardOk"}); return; }
+    if(pd.k==="buy"){
+      const s=SP[pd.i];
+      const cushion=(s.t==="rail"||s.t==="util"||completesGroup(G.cur,pd.i))?0:150;
+      dispatchAction(G.cur,{type: p.cash>=s.p+cushion ? "buy" : "passBuy"}); return;
+    }
+    if(pd.k==="jail"){
+      if(p.goojf>0){ dispatchAction(G.cur,{type:"jailCard"}); return; }
+      if(p.cash>=200){ dispatchAction(G.cur,{type:"jailPay"}); return; }
+      dispatchAction(G.cur,{type:"jailRoll"}); return;
+    }
+    if(pd.k==="debt"){
+      botRaiseFunds(p, pd.amt);
+      dispatchAction(G.cur,{type: p.cash>=pd.amt ? "payDebt" : "concede"}); return;
+    }
+    return;
+  }
+  if(G.phase==="roll"){ botImprove(p); dispatchAction(G.cur,{type:"roll"}); return; }
+  if(G.phase==="acted"){ dispatchAction(G.cur,{type:"endTurn"}); return; }
+}
+function botRaiseFunds(p, amt){
+  let guard=0;
+  while(p.cash<amt && guard++<200){
+    let best=-1;
+    SP.forEach((s,i)=>{ const st=G.ps[i]; if(st&&st.owner===G.cur&&st.b>0){ if(best<0||s.hc>SP[best].hc) best=i; }});
+    if(best>=0){ sellB(p,best); continue; }
+    best=-1;
+    SP.forEach((s,i)=>{ const st=G.ps[i]; if(st&&st.owner===G.cur&&!st.mort&&st.b===0&&(!s.g||groupBZero(s.g))){ if(best<0||s.p<SP[best].p) best=i; }});
+    if(best>=0){ mort(p,best); continue; }
+    break;
+  }
+}
+function botImprove(p){
+  let guard=0;
+  while(guard++<30){
+    let pick=-1;
+    SP.forEach((s,i)=>{ const st=G.ps[i];
+      if(s.t==="prop"&&st.owner===G.cur&&!st.mort&&st.b<5&&ownsGroup(G.cur,s.g)&&groupMortFree(s.g)&&p.cash>=s.hc+400){
+        if(pick<0||st.b<G.ps[pick].b||(st.b===G.ps[pick].b&&s.hc<SP[pick].hc)) pick=i;
+      }});
+    if(pick<0) break;
+    build(p,pick);
+  }
+  let g2=0;
+  while(g2++<15){
+    let pick=-1;
+    SP.forEach((s,i)=>{ const st=G.ps[i]; if(st&&st.owner===G.cur&&st.mort&&p.cash>=unmortCost(i)+700){ if(pick<0||s.p<SP[pick].p) pick=i; }});
+    if(pick<0) break;
+    unmort(p,pick);
+  }
+}
+
+/* =====================  LOBBY / NETWORKING  ===================== */
+function genCode(){ const A="ABCDEFGHJKMNPQRSTUVWXYZ23456789"; let c=""; for(let k=0;k<5;k++) c+=A[Math.floor(Math.random()*A.length)]; return c; }
+function showMode(m){
+  ["local","host","join"].forEach(x=>{
+    $("mode-"+x).classList.toggle("hidden", x!==m);
+    $("mb-"+x).classList.toggle("selmode", x===m);
+  });
+  if(m==="local") buildSetupRows();
+}
+/* ---- local setup ---- */
+let seatBots=[];
+function buildSetupRows(){
+  const n=+$("npl").value, box=$("plrows");
+  seatBots=[]; box.innerHTML="";
+  for(let i=0;i<n;i++){
+    seatBots.push(i>0);
+    const row=document.createElement("div"); row.className="setuprow";
+    const tok=document.createElement("span"); tok.style.fontSize="20px"; tok.textContent=TOKENS[i];
+    const inp=document.createElement("input");
+    inp.type="text"; inp.maxLength=14; inp.id="pname"+i; inp.placeholder="Player "+(i+1)+" name";
+    const tg=document.createElement("button");
+    tg.className="smallbtn hbtog"; tg.id="tog"+i;
+    tg.onclick=()=>{ seatBots[i]=!seatBots[i]; styleTog(i); };
+    row.appendChild(tok); row.appendChild(inp); row.appendChild(tg);
+    box.appendChild(row); styleTog(i);
+  }
+}
+function styleTog(i){
+  const tg=$("tog"+i);
+  tg.textContent = seatBots[i] ? "🤖 Bot" : "🙂 Human";
+  tg.classList.toggle("isbot", seatBots[i]);
+}
+function startLocal(){
+  const n=+$("npl").value; let b=0;
+  const roster=[];
+  for(let i=0;i<n;i++){
+    const v=($("pname"+i).value||"").trim();
+    roster.push({ name: v || (seatBots[i]? BOTNAMES[b++ % BOTNAMES.length] : "Player "+(i+1)), bot:seatBots[i] });
+  }
+  NET.mode="local";
+  beginGame(roster);
+}
+function beginGame(roster){
+  newGame(roster);
+  $("setup").classList.add("hidden");
+  afterChange();
+}
+/* ---- host ---- */
+function hostRoom(){
+  if(window._noPeer||typeof Peer==="undefined"){ $("hoststatus").textContent="Online play needs an internet connection (network library didn't load)."; return; }
+  const name=($("hostname").value.trim()||"Host");
+  $("mkroom").disabled=true; $("hostname").disabled=true;
+  $("hoststatus").textContent="Creating room…";
+  NET.mode="host"; NET.code=genCode(); NET.roster=[{name, bot:false, conn:null}];
+  NET.peer=new Peer("rth26-"+NET.code);
+  NET.peer.on("open", ()=>{
+    $("hostlobby").classList.remove("hidden");
+    $("codebox").textContent=NET.code;
+    renderRoster();
+  });
+  NET.peer.on("connection", conn=>{
+    conn.on("data", d=>hostOnData(conn,d));
+    conn.on("close", ()=>hostDrop(conn));
+  });
+  NET.peer.on("error", e=>{
+    $("hoststatus").textContent="Network hiccup ("+e.type+"). Click Create Room to retry.";
+    $("mkroom").disabled=false; $("hostname").disabled=false;
+    NET.mode="local";
+    try{ NET.peer.destroy(); }catch(_){}
+  });
+}
+function hostOnData(conn,d){
+  if(!d) return;
+  if(d.t==="hello"){
+    if(G&&G.started){ conn.send({t:"denied", why:"Game already started."}); return; }
+    if(NET.roster.length>=6){ conn.send({t:"denied", why:"Room is full (6 max)."}); return; }
+    NET.roster.push({name:String(d.name||"Friend").slice(0,14), bot:false, conn});
+    sendLobby(); renderRoster();
+  } else if(d.t==="action"&&G&&G.started){
+    const seat=NET.roster.findIndex(r=>r.conn===conn);
+    if(seat>0) dispatchAction(seat, d.a);
+  }
+}
+function hostDrop(conn){
+  const idx=NET.roster.findIndex(r=>r.conn===conn);
+  if(idx<0) return;
+  if(G&&G.started){
+    NET.roster[idx].conn=null;
+    const p=G.players[idx];
+    if(p&&p.alive&&!p.bot){
+      p.bot=true;
+      log("📡 <b>"+esc(p.name)+"</b> lost connection — a 🤖 takes over their campaign.");
+      afterChange();
+    }
+  } else {
+    NET.roster.splice(idx,1);
+    sendLobby(); renderRoster();
+  }
+}
+function sendLobby(){
+  NET.roster.forEach((r,i)=>{ if(r.conn&&r.conn.open) r.conn.send({t:"lobby", names:NET.roster.map(q=>({name:q.name,bot:q.bot})), youSeat:i, code:NET.code}); });
+}
+function renderRoster(){
+  const box=$("hostroster"); box.innerHTML="";
+  NET.roster.forEach((r,i)=>{
+    const row=document.createElement("div"); row.className="rosterrow";
+    row.innerHTML='<span>'+TOKENS[i]+'</span><span class="rname">'+esc(r.name)+'</span>'+
+      (r.bot?'<span class="badge bot">🤖 BOT</span>':(i===0?'<span class="badge">HOST</span>':'<span class="badge">JOINED</span>'));
+    if(i>0){
+      const rm=document.createElement("button"); rm.className="smallbtn"; rm.textContent="✕";
+      rm.onclick=()=>{ const r2=NET.roster[i]; if(r2.conn){ try{r2.conn.close(); }catch(_){} } NET.roster.splice(i,1); sendLobby(); renderRoster(); };
+      row.appendChild(rm);
+    }
+    box.appendChild(row);
+  });
+  $("hoststart").disabled = NET.roster.length<2;
+  $("hoststatus").textContent = NET.roster.length<2 ? "Share the code, or add a bot (2–6 play)." : NET.roster.length+" campaigns ready!";
+}
+function addBot(){
+  if(NET.roster.length>=6) return;
+  const used=NET.roster.filter(r=>r.bot).length;
+  NET.roster.push({name:BOTNAMES[used%BOTNAMES.length], bot:true, conn:null});
+  sendLobby(); renderRoster();
+}
+function hostStart(){
+  if(NET.roster.length<2) return;
+  beginGame(NET.roster.map(r=>({name:r.name, bot:r.bot})));
+}
+function broadcastState(){
+  if(NET.mode!=="host") return;
+  NET.roster.forEach(r=>{ if(r.conn&&r.conn.open) r.conn.send({t:"state", g:G}); });
+}
+/* ---- client ---- */
+function joinRoom(){
+  if(window._noPeer||typeof Peer==="undefined"){ $("joinstatus").textContent="Online play needs an internet connection (network library didn't load)."; return; }
+  const name=($("joinname").value.trim()||"Friend");
+  const code=($("joincode").value.trim().toUpperCase());
+  if(code.length!==5){ $("joinstatus").textContent="Enter the 5-letter room code."; return; }
+  $("joinbtn").disabled=true;
+  $("joinstatus").textContent="Connecting…";
+  NET.mode="client"; NET.code=code;
+  NET.peer=new Peer();
+  NET.peer.on("open", ()=>{
+    NET.conn=NET.peer.connect("rth26-"+code, {reliable:true});
+    NET.conn.on("open", ()=>{ NET.conn.send({t:"hello", name}); $("joinstatus").textContent="Connected! Waiting in the lobby…"; });
+    NET.conn.on("data", clientOnData);
+    NET.conn.on("close", ()=>{ NET.dead=true; $("joinstatus").textContent="Disconnected from host."; if(G&&G.started) renderAll(); });
+  });
+  NET.peer.on("error", e=>{
+    NET.mode="local"; $("joinbtn").disabled=false;
+    $("joinstatus").textContent = e.type==="peer-unavailable" ? "No room found with code "+code+"." : "Network error: "+e.type;
+  });
+}
+function clientOnData(d){
+  if(!d) return;
+  if(d.t==="lobby"){
+    NET.seat=d.youSeat;
+    $("joinstatus").textContent="In the lobby ("+d.names.length+" joined) — waiting for the host to start. You are "+TOKENS[d.youSeat]+" seat "+(d.youSeat+1)+".";
+  } else if(d.t==="denied"){
+    $("joinstatus").textContent="❌ "+d.why;
+    try{ NET.conn.close(); }catch(_){}
+    NET.mode="local"; $("joinbtn").disabled=false;
+  } else if(d.t==="state"){
+    G=d.g;
+    if(G&&G.started){ $("setup").classList.add("hidden"); renderAll(); }
+  }
+}
+
+/* =====================  INIT  ===================== */
+function rulesDone(){ if(G&&G.started) renderAll(); else hideModal(); }
+function callIt(){   // host/local only: end a marathon game by net worth
+  if(!G||!G.started||G.over||NET.mode==="client") return;
+  if(typeof confirm==="function" && !confirm("End the game now? Highest net worth (cash + property) takes Terrace Hill.")) return;
+  let best=-1, bw=-1;
+  G.players.forEach((p,pi)=>{ if(p.alive){ const w=netWorth(pi); if(w>bw){ bw=w; best=pi; } }});
+  G.over=true; G.winner=best;
+  log("🔔 The table calls it! <b>"+esc(G.players[best].name)+"</b> wins on net worth ("+fmt(bw)+").");
+  afterChange();
+}
+(function init(){
+  buildBoard();
+  showMode("local");
+  $("npl").onchange=buildSetupRows;
+  /* Peer loads async; hostRoom/joinRoom re-check availability at click time */
+})();
+</script>
+</body>
+</html>

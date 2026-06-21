@@ -411,8 +411,8 @@ function dispatchAction(seat, a){
     case "passBuy":  if(pd&&pd.k==="buy"){ log("<b>"+esc(p.name)+"</b> passes on "+SP[pd.i].n+"."); G.pending=null; finishAction(p); } break;
     case "cardOk":   if(pd&&pd.k==="card"){ G.pending=null; applyCard(p, pd.deck, pd.ci); } break;
     case "build":    if(!pd) build(p, a.i); break;
-    case "sell":     if(!pd||pd.k==="debt") sellB(p, a.i); break;
-    case "mort":     if(!pd||pd.k==="debt") mort(p, a.i); break;
+    case "sell":     if(!pd||pd.k==="debt"||pd.k==="buy") sellB(p, a.i); break;
+    case "mort":     if(!pd||pd.k==="debt"||pd.k==="buy") mort(p, a.i); break;
     case "unmort":   if(!pd) unmort(p, a.i); break;
     case "payDebt":  if(pd&&pd.k==="debt"&&p.cash>=pd.amt) settleDebt(p); break;
     case "concede":  if(pd&&pd.k==="debt") bankrupt(p, pd.to); break;
@@ -481,8 +481,8 @@ function resolveSpace(p, i, opts){
   if(ownable(i)){
     const st=G.ps[i];
     if(st.owner===null){
-      if(p.cash>=s.p){ G.pending={k:"buy", i}; }
-      else { log("<b>"+esc(p.name)+"</b> can't afford <b>"+s.n+"</b> ("+fmt(s.p)+"). It stays open."); finishAction(p); }
+      if(p.cash>=s.p || netWorth(G.cur)>=s.p){ G.pending={k:"buy", i}; }
+      else { log("<b>"+esc(p.name)+"</b> can't afford <b>"+s.n+"</b> ("+fmt(s.p)+") even by mortgaging. It stays open."); finishAction(p); }
       return;
     }
     if(st.owner!==G.cur && !st.mort){
@@ -645,7 +645,7 @@ function unmort(p, i){
 }
 /* =====================  UI / RENDER  ===================== */
 const spaceEls=[];
-let uiManage=false, uiView=null, uiTrade=null;
+let uiManage=false, uiView=null, uiTrade=null, uiRaise=false;
 
 function coordFor(i){
   if(i<=10) return [11, 11-i];
@@ -770,7 +770,7 @@ function hideModal(){ $("modal").classList.add("hidden"); }
 
 function renderModal(){
   if(!G||!G.started){ hideModal(); return; }
-  if(!canControl()){ uiManage=false; uiTrade=null; }
+  if(!canControl()){ uiManage=false; uiTrade=null; uiRaise=false; }
   if(G.over){
     const w=G.players[G.winner];
     openModal("<h2>🏆 Victory!</h2><div class='cardtxt'><b>"+esc(w.name)+" "+w.tok+
@@ -781,13 +781,18 @@ function renderModal(){
   }
   if(G.trade){ const role=tradeViewerRole(); if(role){ openModal(tradeModalHTML(role)); return; } }
   const pd=G.pending, mine=canControl();
+  if(!(pd&&pd.k==="buy")) uiRaise=false;
   if(pd&&mine){
     if(pd.k==="buy"){
-      const s=SP[pd.i];
-      openModal(deedHTML(pd.i)+'<div class="btnrow">'+
-        '<button class="smallbtn" onclick="__act(\'passBuy\')">Pass</button>'+
-        '<button class="bigbtn green" onclick="__act(\'buy\')">Buy for '+fmt(s.p)+'</button></div>');
-      return;
+      const s=SP[pd.i], bp=G.players[G.cur];
+      if(uiRaise){ openModal(raiseFundsHTML(pd.i)); return; }
+      const canBuy=bp.cash>=s.p;
+      let bh=deedHTML(pd.i);
+      if(!canBuy) bh+='<div class="cardtxt" style="font-size:13px;color:#a4343a;text-align:center;margin:8px 0">You have '+fmt(bp.cash)+' — need <b>'+fmt(s.p-bp.cash)+' more</b>. Mortgage or sell a town to raise funds.</div>';
+      bh+='<div class="btnrow"><button class="smallbtn" onclick="__act(\'passBuy\')">Pass</button>';
+      if(!canBuy && netWorth(G.cur)>bp.cash) bh+='<button class="smallbtn" style="background:var(--corn)" onclick="openRaise()">💰 Raise funds</button>';
+      bh+='<button class="bigbtn green" '+(canBuy?'':'disabled')+' onclick="__act(\'buy\')">Buy for '+fmt(s.p)+'</button></div>';
+      openModal(bh); return;
     }
     if(pd.k==="card"){
       const c=(pd.deck==="caucus"?CAUCUS:TOWNHALL)[pd.ci];
@@ -887,6 +892,34 @@ function showRules(){
    "<i>House rules: even-building isn't enforced; RAGBRAI Rest Day pays nothing. Your table, your vote — it's Iowa.</i>"+
    "</div><div class='btnrow'><button class='bigbtn' onclick='rulesDone()'>Got it</button></div>");
 }
+/* ----- raise funds during a purchase ----- */
+function openRaise(){ uiRaise=true; renderAll(); }
+function closeRaise(){ uiRaise=false; renderAll(); }
+function buyAfterRaise(){ uiRaise=false; act({type:"buy"}); }
+function raiseFundsHTML(buyIdx){
+  const p=G.players[G.cur], s=SP[buyIdx];
+  const enough=p.cash>=s.p;
+  let h="<h2>💰 Raise Funds</h2>";
+  h+='<div class="cardtxt" style="font-size:13px">Buying <b>'+s.n+'</b> ('+fmt(s.p)+'). You have <b>'+fmt(p.cash)+'</b>'+
+     (enough?' — <b style="color:var(--prairie)">enough to buy!</b>':' — need <b style="color:#a4343a">'+fmt(s.p-p.cash)+' more</b>.')+'</div>';
+  const mine=SP.map((x,i)=>G.ps[i]&&G.ps[i].owner===G.cur?i:-1).filter(i=>i>=0);
+  if(!mine.length) h+="<div class='cardtxt'><i>No towns to mortgage.</i></div>";
+  mine.forEach(i=>{
+    const x=SP[i], st=G.ps[i], col=x.g?GROUPS[x.g].color:"#999";
+    let row='<div style="display:flex;align-items:center;gap:6px;border-bottom:1px dotted var(--line);padding:5px 0;font-size:13px">'+
+      '<i style="width:12px;height:12px;background:'+col+';border:1px solid var(--ink);border-radius:3px;flex:none"></i>'+
+      '<span style="flex:1"><b>'+x.n+'</b>'+(st.mort?" <i>(mortgaged)</i>":"")+(st.b?" — "+(st.b===5?"HQ 🟥":st.b+" 🟩"):"")+'</span>';
+    if(st.b>0) row+='<button class="smallbtn" onclick="__act(\'sell\','+i+')">Sell 🟩 +$'+(x.hc/2)+'</button>';
+    if(st.b===0 && !st.mort && (!x.g||groupBZero(x.g))) row+='<button class="smallbtn" onclick="__act(\'mort\','+i+')">Mortg. +$'+(x.p/2)+'</button>';
+    row+='</div>';
+    h+=row;
+  });
+  h+='<div class="btnrow">';
+  if(enough) h+='<button class="bigbtn green" onclick="buyAfterRaise()">Buy for '+fmt(s.p)+'</button>';
+  h+='<button class="bigbtn" onclick="closeRaise()">Back</button></div>';
+  return h;
+}
+
 /* =====================  TRADING  ===================== */
 function groupHasBuildings(g){ if(!g) return false; return groupIdx(g).some(i=>G.ps[i].b>0); }
 function tradableProps(seat){
